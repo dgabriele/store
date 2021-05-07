@@ -25,8 +25,10 @@ def get_hashable(value: Any, return_exc=False) -> Any:
     """
     if isinstance(value, dict):
         return tuple(sorted(value.items()))
-    elif isinstance(value, (set, list)):
+    elif isinstance(value, list):
         return tuple(value)
+    elif isinstance(value, set):
+        return tuple(sorted(value))
     else:
         exc = NotHashable(
             f'cannot store unhashable types, but got {type(value)}'
