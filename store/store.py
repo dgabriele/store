@@ -10,7 +10,7 @@ from typing import (
     Iterable, Text
 )
 
-from .index import IndexManager
+from .index_manager import IndexManager
 
 class Store:
     """
