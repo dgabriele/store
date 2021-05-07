@@ -1,3 +1,7 @@
+"""
+Global Pytest fixtures and configuration.
+"""
+
 from uuid import uuid4
 from typing import Dict
 
