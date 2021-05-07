@@ -8,10 +8,13 @@ from typing import (
 
 from BTrees.OOBTree import BTree  # type: ignore
 
+from .util import is_hashable
+from .exceptions import NotHashable
+
 
 class Store:
     def __init__(self, primary_key: Text = 'id'):
-        self.pk_name = primary_key
+        self.pkey_name = primary_key
         self.indexer = IndexManager(primary_key)
         self.records = {}
         self.lock = RLock()
@@ -29,7 +32,7 @@ class Store:
 
     def get_many(
         self, primary_keys: List[Any]
-    ) -> OrderedDict[Any, Optional[Dict]]:
+    ) -> OrderedDictType[Any, Optional[Dict]]:
         """
         Return a multiple records by primary key. Records are returned in the
         form of a dict, mapping each primary key to a possibly-null record dict.
@@ -61,14 +64,14 @@ class Store:
         with self.lock:
             for record in records:
                 record = record.copy()
-                pk = record[self.pk_name]
+                pkey = record[self.pkey_name]
                 # store in global primary key map
-                self.records[pk] = record
+                self.records[pkey] = record
                 # update index B-trees for each 
                 if record is not None:
                     self.indexer.insert(record, keys=record.keys())
                 # add record to return created dict
-                created[pk] = record.copy()
+                created[pkey] = record.copy()
 
         return created
 
@@ -76,10 +79,10 @@ class Store:
         """
         Update an existing record in the store, returning the updated record.
         """
-        pk = record[self.pk_name]
+        pkey = record[self.pkey_name]
         keys = set(keys or record.keys())
 
-        existing_record = self.records[pk]
+        existing_record = self.records[pkey]
         old_record = existing_record.copy()
 
         with self.lock:
@@ -96,26 +99,26 @@ class Store:
         updated = OrderedDict()
         with self.lock:
             for record in records:
-                pk = record[self.pk_name]
-                existing_record = self.records.get(pk)
+                pkey = record[self.pkey_name]
+                existing_record = self.records.get(pkey)
                 if existing_record is not None:
-                    updated[pk] = self.update(record)
+                    updated[pkey] = self.update(record)
         return updated
 
-    def delete(self, pk: Any, keys: Optional[Iterable[Text]] = None) -> None:
+    def delete(self, pkey: Any, keys: Optional[Iterable[Text]] = None) -> None:
         """
         Delete an entire record from the store if no `keys` argument supplied;
         otherwise, drop only the specified keys from the stored record.
         """
-        if isinstance(pk, dict):
-            pk = pk[self.pk_name]
+        if isinstance(pkey, dict):
+            pkey = pkey[self.pkey_name]
         with self.lock:
-            if pk in self.records:
+            if pkey in self.records:
                 if not keys:
-                    record = self.records.pop(pk)
+                    record = self.records.pop(pkey)
                     self.indexer.remove(record)
                 else:
-                    record = self.records[pk]
+                    record = self.records[pkey]
                     for key in keys:
                         if key in record:
                             del record[key]
@@ -133,15 +136,17 @@ class Store:
         with self.lock:
             if not keys:
                 # drop entire objects
-                for pk in pks:
-                    if isinstance(pk, dict):
-                        pk = pk[self.pk_name]
-                    self.delete(pk)
+                for target in targets:
+                    if isinstance(target, dict):
+                        pkey = target[self.pkey_name]
+                    else:
+                        pkey = target
+                    self.delete(pkey)
             else:
                 # drop only the keys/columns
                 keys = keys if isinstance(keys, set) else set(keys)
-                for pk in pks:
-                    record = self.records.get(pk)
+                for pkey in pkeys:
+                    record = self.records.get(pkey)
                     if record:
                         for key in keys:
                             if key in record:
@@ -156,23 +161,24 @@ class IndexManager:
     """
 
     def __init__(self, primary_key: Text):
-        self.pk_name = primary_key
+        self.pkey_name = primary_key
         self.indexes = {}             # BTree indices
-        self.keys = defaultdict(set)  # map from pk to set of indexed dict keys
+        self.keys = defaultdict(set)  # map from pkey to set of indexed dict keys
 
     def insert(self, record: Dict, keys: Iterable[Text]):
         """
         Add the primary key of the given record to the keyed indexes.
         """
         keys = set(keys) if not isinstance(keys, set) else keys
-        keys -= {self.pk_name}
+        keys -= {self.pkey_name}
 
-        pk = record[self.pk_name]
+        pkey = record[self.pkey_name]
 
         # record dict keys we're inserting in indices
-        self.keys[pk] |= keys
+        self.keys[pkey] |= keys
 
         # insert in indices
+        key = None
         try:
             for key in keys:
                 value = self.make_indexable(record.get(key))
@@ -185,25 +191,25 @@ class IndexManager:
                 index = self.indexes[key]
                 if value not in index:
                     index[value] = set()
-                    index[value].add(pk)
-        except TypeError as exc:
-            exc.messate += f'(key: "{key}")'
-            raise exc
+                    index[value].add(pkey)
+        except NotHashable as exc:
+            raise NotHashable(exc.value, key) from exc
 
     def remove(self, record: Dict, keys: Optional[Iterable[Text]] = None):
         """
         Remove the primary key of the given record from the keyed indexes.
         """
-        pk = record[self.pk_name]
+        pkey = record[self.pkey_name]
         keys = keys if isinstance(keys, set) else set(keys or [])
-        keys = (keys or self.keys.get(pk)) - {self.pk_name}
+        keys = (keys or self.keys.get(pkey)) - {self.pkey_name}
 
         # remove keys from key map set and delete entry
         # from keys map if no more keys
         if keys:
-            self.keys[pk] -= keys
+            self.keys[pkey] -= keys
 
             # remove entries in B-tree indexes
+            key = None
             try:
                 for key in keys:
                     # lazy create index
@@ -212,31 +218,30 @@ class IndexManager:
                         continue
                     index = self.indexes[key]
                     value = self.make_indexable(record[key])
-                    index[value].discard(pk)
+                    index[value].discard(pkey)
                     if not index[value]:
                         del index[value]
-            except ValueError as exc:
-                exc.messate += f'(key: "{key}")'
-                raise exc
+            except NotHashable as exc:
+                raise NotHashable(exc.value, key) from exc
 
         # if all keys removed from all indices,
         # remove entry in keys dict
-        if not self.keys[pk]:
-            del self.keys[pk]
+        if not self.keys[pkey]:
+            del self.keys[pkey]
         
     def update(self, old_record: Dict, record: Dict, keys: Iterable[Text]):
         """
         Update indices based on how values have changed between old and new
         copies of an updated record.
         """
-        keys = keys if isinstance(keys, set) else set(keys) - {self.pk_name}
-        pk = record[self.pk_name]
+        keys = keys if isinstance(keys, set) else set(keys) - {self.pkey_name}
+        pkey = record[self.pkey_name]
 
         # keys for which indices need to be updated:
-        stale_keys = self.keys[pk] & keys
+        stale_keys = self.keys[pkey] & keys
 
         # keys that are not yet indexed:
-        new_keys = keys - self.keys[pk]
+        new_keys = keys - self.keys[pkey]
 
         # update stale indices
         if stale_keys:
@@ -257,8 +262,7 @@ class IndexManager:
         elif isinstance(value, set):
             return tuple(sorted(value))
         else:
-            is_hashable = isinstance(value, Hashable)
-            if not is_hashable:
+            if not is_hashable(value):
                 raise TypeError(
                     f'cannot store unhashable types, but got {type(value)}'
                 )

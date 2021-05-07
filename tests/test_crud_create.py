@@ -9,14 +9,14 @@ def test_create(store, press_event):
     # check integrity of indexer.keys, which tracks which "column" keys of the
     # record are indexed for a given primary key. Note that the primary key
     # itself is not managed by the indexer.
-    primary_key = record[store.pk_name]
-    column_keys = set(record.keys() - {store.pk_name})
+    primary_key = record[store.pkey_name]
+    column_keys = set(record.keys() - {store.pkey_name})
 
     assert primary_key in store.indexer.keys
     assert column_keys == store.indexer.keys[primary_key]
 
     # ensure that index data structures are indeed lazily constructed
-    assert store.pk_name not in store.indexer.keys
+    assert store.pkey_name not in store.indexer.keys
     for k in column_keys:
         assert k in store.indexer.indexes
         index = store.indexer.indexes[k]
@@ -36,8 +36,8 @@ def test_create_many_returns_expected(store, press_event):
     # note that this test is not very long, as store.create_many internally
     # just calls store.create multiple times -- once for each record.
     records = store.create_many([press_event])
-    pk = press_event[store.pk_name]
+    pkey = press_event[store.pkey_name]
 
     assert len(records) == 1
-    assert set(records.keys()) == {pk}
-    assert records[pk] == press_event
+    assert set(records.keys()) == {pkey}
+    assert records[pkey] == press_event
