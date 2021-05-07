@@ -45,7 +45,7 @@ def test_create_many_returns_expected(store, press_event):
 
 def test_basic_crud_with_instance_object(store, Person):
     # basid CRUD using a Person instance instead of a dict
-    person = Person('abc123', 'Frank', 17, [69, 666, 1337])
+    person = Person('abc123', 'Frank', 17, [69, 666, "foo", 1337])
 
     record = store.create(person)
     assert set(record.keys()) == {
