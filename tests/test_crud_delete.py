@@ -9,7 +9,7 @@ def test_delete(store_with_data, press_event, click_event):
     assert not store_with_data.records
 
     indexer = store_with_data.indexer
-    for k, index in indexer.indexes.items():
+    for k, index in indexer.indices.items():
         print(k)
         for record in [press_event, click_event]:
             if k in record:

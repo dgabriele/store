@@ -18,8 +18,8 @@ def test_create(store, press_event):
     # ensure that index data structures are indeed lazily constructed
     assert store.pkey_name not in store.indexer.keys
     for k in column_keys:
-        assert k in store.indexer.indexes
-        index = store.indexer.indexes[k]
+        assert k in store.indexer.indices
+        index = store.indexer.indices[k]
         assert len(index) == 1
 
 
