@@ -1,3 +1,6 @@
+from store.util import get_hashable
+
+
 def test_delete(store_with_data, press_event, click_event):
     store_with_data.delete(press_event)
 
@@ -13,5 +16,5 @@ def test_delete(store_with_data, press_event, click_event):
         print(k)
         for record in [press_event, click_event]:
             if k in record:
-                v = indexer.make_indexable(record[k])
+                v = get_hashable(record[k])
                 assert v not in index

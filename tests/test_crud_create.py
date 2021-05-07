@@ -41,3 +41,26 @@ def test_create_many_returns_expected(store, press_event):
     assert len(records) == 1
     assert set(records.keys()) == {pkey}
     assert records[pkey] == press_event
+
+
+def test_basic_crud_with_instance_object(store, Person):
+    # basid CRUD using a Person instance instead of a dict
+    person = Person('abc123', 'Frank', 17, [69, 666, 1337])
+
+    record = store.create(person)
+    assert set(record.keys()) == {
+        'id', 'name', 'age', 'lucky_numbers'
+    }
+    for k, v in record.items():
+        assert getattr(person, k) == v
+
+    fetched_record = store.get(person.id)
+    for k, v in fetched_record.items():
+        assert getattr(person, k) == v
+
+    old_age = person.age
+    person.age = 1000
+    updated_record = store.update(person, {'age'})
+    assert updated_record['age'] != old_age
+    for k, v in updated_record.items():
+        assert getattr(person, k) == v

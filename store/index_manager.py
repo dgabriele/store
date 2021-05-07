@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional, Iterable, Text
 
 from BTrees.OOBTree import BTree # type: ignore
 
-from .util import is_hashable
+from .util import get_hashable
 from .exceptions import NotHashable
 
 
@@ -37,7 +37,7 @@ class IndexManager:
         key = None
         try:
             for key in keys:
-                value = self.make_indexable(record.get(key))
+                value = get_hashable(record.get(key))
 
                 # lazy create index
                 if key not in self.indices:
@@ -73,7 +73,7 @@ class IndexManager:
                         self.indices[key] = BTree()
                         continue
                     index = self.indices[key]
-                    value = self.make_indexable(record[key])
+                    value = get_hashable(record[key])
                     index[value].discard(pkey)
                     if not index[value]:
                         del index[value]
@@ -106,20 +106,3 @@ class IndexManager:
 
         # insert new indices
         self.insert(record, new_keys)
-
-    def make_indexable(self, value: Any) -> Any:
-        """
-        Some datatypes, like dicts and sets, are not hashable and can't be
-        inserted into index dicts as keys; therefore, we must convert them to a
-        form that is. That's what we do here.
-        """
-        if isinstance(value, dict):
-            return tuple(sorted(value.items()))
-        elif isinstance(value, set):
-            return tuple(sorted(value))
-        else:
-            if not is_hashable(value):
-                raise TypeError(
-                    f'cannot store unhashable types, but got {type(value)}'
-                )
-            return value

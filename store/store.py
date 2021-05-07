@@ -11,6 +11,7 @@ from typing import (
 )
 
 from .index_manager import IndexManager
+from .util import to_dict
 
 class Store:
     """
@@ -50,7 +51,7 @@ class Store:
                 fetched_records[key] = record
             return fetched_records
 
-    def create(self, record: Dict) -> Dict:
+    def create(self, record: Any) -> Dict:
         """
         Insert a new record in the store.
         """
@@ -58,7 +59,7 @@ class Store:
         records = list(record_map.values())
         return records[0]
 
-    def create_many(self, records: List[Dict]) -> OrderedDictType[Any, Dict]:
+    def create_many(self, records: List[Any]) -> OrderedDictType[Any, Dict]:
         """
         Insert multiple records in the store, returning a mapping of created
         primary key to created record. Dict keys are ordered by insertion.
@@ -67,22 +68,33 @@ class Store:
 
         with self.lock:
             for record in records:
+                # try to convert instance object to dict
+                if not isinstance(record, dict):
+                    record = to_dict(record)
+
                 record = record.copy()
                 pkey = record[self.pkey_name]
+
                 # store in global primary key map
                 self.records[pkey] = record
+
                 # update index B-trees for each 
                 if record is not None:
                     self.indexer.insert(record, keys=record.keys())
+
                 # add record to return created dict
                 created[pkey] = record.copy()
 
         return created
 
-    def update(self, record: Dict, keys: Optional[Set] = None) -> Dict:
+    def update(self, record: Any, keys: Optional[Set] = None) -> Dict:
         """
         Update an existing record in the store, returning the updated record.
         """
+        # try to convert instance object to dict
+        if not isinstance(record, dict):
+            record = to_dict(record)
+
         pkey = record[self.pkey_name]
         keys = set(keys or record.keys())
 
@@ -101,12 +113,19 @@ class Store:
         order of the `records` argument.
         """
         updated = OrderedDict()
+
         with self.lock:
             for record in records:
+                # try to convert instance object to dict
+                if not isinstance(record, dict):
+                    record = to_dict(record)
+
                 pkey = record[self.pkey_name]
                 existing_record = self.records.get(pkey)
+                
                 if existing_record is not None:
                     updated[pkey] = self.update(record)
+
         return updated
 
     def delete(self, pkey: Any, keys: Optional[Iterable[Text]] = None) -> None:

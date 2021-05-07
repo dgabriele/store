@@ -44,3 +44,15 @@ def store_with_data(store, store_record_list) -> Store:
     for record in store_record_list:
         store.create(record)
     return store
+
+
+@pytest.fixture(scope='function')
+def Person():
+    class Person:
+        def __init__(self, id, name, age, lucky_numbers) -> None:
+            self.id = id
+            self.name = name
+            self.age = age
+            self.lucky_numbers = lucky_numbers
+
+    return Person
