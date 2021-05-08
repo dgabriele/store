@@ -10,8 +10,10 @@ from typing import (
     Iterable, Text
 )
 
+from .symbol import Symbol
 from .index_manager import IndexManager
 from .util import to_dict
+
 
 class Store:
     """
@@ -23,6 +25,10 @@ class Store:
         self.indexer = IndexManager(primary_key)
         self.records = {}
         self.lock = RLock()
+
+    @staticmethod
+    def symbol() -> Symbol:
+        return Symbol()
 
     def select(self, *args, **kwargs) -> List[Dict]:
         raise NotImplementedError()
@@ -122,7 +128,7 @@ class Store:
 
                 pkey = record[self.pkey_name]
                 existing_record = self.records.get(pkey)
-                
+
                 if existing_record is not None:
                     updated[pkey] = self.update(record)
 

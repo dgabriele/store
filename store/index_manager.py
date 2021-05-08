@@ -26,7 +26,6 @@ class IndexManager:
         Add the primary key of the given record to the keyed indices.
         """
         keys = set(keys) if not isinstance(keys, set) else keys
-        keys -= {self.pkey_name}
 
         pkey = record[self.pkey_name]
 
@@ -57,7 +56,7 @@ class IndexManager:
         """
         pkey = record[self.pkey_name]
         keys = keys if isinstance(keys, set) else set(keys or [])
-        keys = (keys or self.keys.get(pkey)) - {self.pkey_name}
+        keys = (keys or self.keys.get(pkey).copy())
 
         # remove keys from key map set and delete entry
         # from keys map if no more keys
@@ -70,13 +69,14 @@ class IndexManager:
                 for key in keys:
                     # lazy create index
                     if key not in self.indices:
-                        self.indices[key] = BTree()
                         continue
                     index = self.indices[key]
                     value = get_hashable(record[key])
                     index[value].discard(pkey)
                     if not index[value]:
                         del index[value]
+                    if not index:
+                        del self.indices[key]
             except NotHashable as exc:
                 raise NotHashable(exc.value, key) from exc
 
@@ -90,7 +90,7 @@ class IndexManager:
         Update indices based on how values have changed between old and new
         copies of an updated record.
         """
-        keys = keys if isinstance(keys, set) else set(keys) - {self.pkey_name}
+        keys = keys if isinstance(keys, set) else set(keys)
         pkey = record[self.pkey_name]
 
         # keys for which indices need to be updated:

@@ -24,3 +24,8 @@ class NotHashable(StoreException):
         )
         self.key = key
         self.value = value
+
+
+class NotSelectable(StoreException):
+    def __init__(self, value: Any) -> None:
+        super().__init__(f'object not selectable: {value}')

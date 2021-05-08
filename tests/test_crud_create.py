@@ -10,7 +10,7 @@ def test_create(store, press_event):
     # record are indexed for a given primary key. Note that the primary key
     # itself is not managed by the indexer.
     primary_key = record[store.pkey_name]
-    column_keys = set(record.keys() - {store.pkey_name})
+    column_keys = set(record.keys())
 
     assert primary_key in store.indexer.keys
     assert column_keys == store.indexer.keys[primary_key]

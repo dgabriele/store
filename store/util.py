@@ -36,8 +36,7 @@ def get_hashable(value: Any, return_exc=False) -> Any:
         if not is_hashable(value):
             if not return_exc:
                 raise exc
-            else:
-                return exc
+            return exc
         return value
 
 
@@ -57,3 +56,16 @@ def to_dict(obj: Any) -> Dict:
                 data[key] = val
 
     return data
+
+
+def union(sequences):
+    """
+    Perform set union
+    """
+    if sequences:
+        if len(sequences) == 1:
+            return sequences[0]
+        else:
+            return set.union(*sequences)
+    else:
+        return set()

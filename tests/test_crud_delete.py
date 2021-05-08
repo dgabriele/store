@@ -13,8 +13,7 @@ def test_delete(store_with_data, press_event, click_event):
 
     indexer = store_with_data.indexer
     for k, index in indexer.indices.items():
-        print(k)
         for record in [press_event, click_event]:
             if k in record:
                 v = get_hashable(record[k])
-                assert v not in index
+                assert record['id'] not in index[v]
