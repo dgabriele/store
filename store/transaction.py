@@ -78,7 +78,7 @@ class Transaction:
 
     def update(self, target: Any, keys: Optional[Set] = None) -> Dict:
         if not isinstance(target, dict):
-            record = to_dict(record)
+            record = to_dict(target)
         else:
             record = target
         self.mutations.append(('update', (deepcopy(record), ), {'keys': keys}))
