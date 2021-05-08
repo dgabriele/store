@@ -30,19 +30,19 @@ def click_event() -> Dict:
 
 
 @pytest.fixture(scope='function')
-def store_record_list(press_event, click_event) -> Store:
+def store_state_list(press_event, click_event) -> Store:
     return [press_event, click_event]
 
 
 @pytest.fixture(scope='function')
 def store() -> Store:
-    return Store(primary_key='id')
+    return Store(pkey='id')
 
 
 @pytest.fixture(scope='function')
-def store_with_data(store, store_record_list) -> Store:
-    for record in store_record_list:
-        store.create(record)
+def store_with_data(store, store_state_list) -> Store:
+    for state in store_state_list:
+        store.create(state)
     return store
 
 

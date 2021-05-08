@@ -10,11 +10,11 @@ class Ordering:
 
     @staticmethod
     def sort(
-        records: List[Dict],
+        states: List[Dict],
         orderings: List['Ordering']
     ) -> List['Dict']:
         """
-        Perform a multi-key sort on the given record list. This procedure
+        Perform a multi-key sort on the given state list. This procedure
         approximately O(N log N).
         """
 
@@ -23,7 +23,7 @@ class Ordering:
         if len(orderings) == 1:
             key = orderings[0].attr.key
             reverse = orderings[0].desc
-            return sorted(records, key=lambda x: x[key], reverse=reverse)
+            return sorted(states, key=lambda x: x[key], reverse=reverse)
 
         # create functions for converting types that are not inherently
         # sortable to an integer value (which is sortable)
@@ -37,14 +37,14 @@ class Ordering:
             date: lambda x: x.toordinal(),
         }
 
-        # pre-compute the "index" keys by which the records shall be sorted.
+        # pre-compute the "index" keys by which the states shall be sorted.
         # Each index is an array of ints.
         indexes = {}
-        for record in records:
+        for state in states:
             index = []
             for ordering in orderings:
                 key = ordering.attr.key
-                value = record.get(key)
+                value = state.get(key)
                 if value is None:
                     value = 0
                 if ordering.desc:
@@ -61,7 +61,7 @@ class Ordering:
                 else:
                     index.append(value)
 
-            indexes[record] = tuple(index)
+            indexes[state] = tuple(index)
 
         # now that we have indexes dict, do the sort!
-        return sorted(records, key=lambda x: indexes[x])
+        return sorted(states, key=lambda x: indexes[x])

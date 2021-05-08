@@ -1,3 +1,4 @@
+from store.dirty import DirtyDict
 from typing import (
     Optional, Text, Any, List,
     OrderedDict as OrderedDictType,
@@ -46,78 +47,88 @@ class Transaction:
         self.front.clear()
         self.mutations.clear()
 
-    def create(self, record: Dict) -> Dict:
-        self.mutations.append(('create', deepcopy(record), {}))
-        return self.front.create(record)
+    def create(self, state: Dict) -> Dict:
+        self.mutations.append(('create', deepcopy(state), {}))
+        return self.front.create(state)
     
-    def create_many(self, records: List[Any]) -> OrderedDictType[Any, Dict]:
-        self.mutations.append(('create_many', [deepcopy(records)], {}))
-        return self.front.create_many(records)
+    def create_many(self, states: List[Any]) -> OrderedDictType[Any, DirtyDict]:
+        self.mutations.append(('create_many', [deepcopy(states)], {}))
+        return self.front.create_many(states)
 
     def select(self, *targets: Union[SymbolicAttribute, Text]) -> Query:
         # TODO: add callback mechanism to Query and use it to merge front
-        # records into back
+        # states into back
         raise NotImplementedError()
     
-    def get(self, pkey: Any) -> Optional[Dict]:
+    def get(self, pkey: Any) -> Optional[DirtyDict]:
         if pkey not in self.front:
-            record = self.back.get(pkey)
-            if record is not None:
-                self.front.create(record)
+            state = self.back.get(pkey)
+            if state is not None:
+                self.front.create(state)
         else:
-            record = self.front.get(pkey)
-        return record
+            state = self.front.get(pkey)
+        state.transaction = self
+        return state
 
-    def get_many(self, pkeys: List[Any]) -> OrderedDictType[Any, Dict]:
-        records = self.front.get_many(pkeys)
-        missing_pkey_set = set(pkeys) - records.keys()
+    def get_many(self, pkeys: List[Any]) -> OrderedDictType[Any, DirtyDict]:
+        states = self.front.get_many(pkeys)
+        missing_pkey_set = set(pkeys) - states.keys()
         if missing_pkey_set:
-            back_records = self.back.get_many(pkeys)
-            self.front.create_many(back_records.values())
-            records.update(back_records)
-        return records
+            back_states = self.back.get_many(pkeys)
+            self.front.create_many(back_states.values())
+            states.update(back_states)
+        return states
 
-    def update(self, target: Any, keys: Optional[Set] = None) -> Dict:
+    def update(self, target: Any, keys: Optional[Set] = None) -> DirtyDict:
         if not isinstance(target, dict):
-            record = to_dict(target)
+            state = to_dict(target)
         else:
-            record = target
-        self.mutations.append(('update', (deepcopy(record), ), {'keys': keys}))
-        pkey = record[self.front.pkey_name]
+            state = target
+        self.mutations.append(('update', (deepcopy(state), ), {'keys': keys}))
+        pkey = state[self.front.pkey_name]
         if pkey not in self.front:
-            back_record = self.back.get(pkey)
-            self.front.create(back_record)
-            return self.front.update(record, keys=keys)
-        return self.front.update(record)
+            back_state = self.back.get(pkey)
+            self.front.create(back_state)
+            return self.front.update(state, keys=keys)
+        state = self.front.update(state)
+        state.transaction = self
+        return state
 
-    def update_many(self, targets: List[Dict]) -> OrderedDictType[Any, Dict]:
-        records = [
+    def update_many(self, targets: List[Dict]) -> OrderedDictType[Any, DirtyDict]:
+        states = [
             to_dict(target) if not isinstance(target, dict) else target
             for target in targets
         ]
-        self.mutations.append(('update_many', (deepcopy(records), ), {}))
-        pkeys = {record[self.front.pkey_name] for record in records}
-        missing_pkey_set = pkeys - self.front.records.keys()
-        back_records = self.back.get_many(missing_pkey_set)
-        self.front.create_many(back_records.values())
-        return self.front.update_many(records)
+        self.mutations.append(('update_many', (deepcopy(states), ), {}))
+        pkeys = {
+            state[self.front.pkey_name] for state in states
+        }
+        missing_pkey_set = pkeys - self.front.states.keys()
+        back_states = self.back.get_many(missing_pkey_set)
+        self.front.create_many(back_states.values())
+        states = self.front.update_many(states)
+        for state in states.values():
+            state.transaction = self
+        return states
 
     def delete(self, target: Any, keys: Optional[Iterable[Text]] = None):
         if isinstance(target, dict):
-            record = target
+            state = target
         else:
-            record = to_dict(target)
-        self.mutations.append(('delete', (deepcopy(record), ), {}))
-        self.front.delete(record, keys=keys)
+            state = to_dict(target)
+        self.mutations.append(('delete', (deepcopy(state), ), {}))
+        self.front.delete(state, keys=keys)
 
     def delete_many(
         self,
         targets: List[Any],
         keys: Optional[Iterable[Text]] = None
     ) -> None:
-        records = [
+        states = [
             to_dict(target) if not isinstance(target, dict) else target
             for target in targets
         ]
-        self.mutations.append(('delete_many', (deepcopy(records), ), {}))
-        self.front.delete_many(records)
+        self.mutations.append(
+            ('delete_many', (deepcopy(states), ), {'keys': keys})
+        )
+        self.front.delete_many(states)

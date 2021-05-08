@@ -20,7 +20,7 @@ class Predicate:
         indexer = store.indexer
 
         if predicate is None:
-            return store.records.keys()
+            return store.states.keys()
 
         op = predicate.op
         empty = set()
@@ -40,7 +40,7 @@ class Predicate:
                 ])
             elif op == OP_CODE.IN:
                 # containment - we compute the union of all sets of ids whose
-                # corresponding records have the given values in the index
+                # corresponding states have the given values in the index
                 v = v if isinstance(v, set) else set(v)
                 computed_ids = union([index.get(k_idx, empty) for k_idx in v])
 

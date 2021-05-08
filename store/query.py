@@ -21,51 +21,51 @@ class Query:
 
     def execute(self, first=False) -> Optional[Dict]:
         if self.predicate is None:
-            records = [
-                record.copy() for record in self.store.records.values()
+            states = [
+                state.copy() for state in self.store.states.values()
             ]
         else:
             pkeys = Predicate.evaluate(self.store, self.predicate)
-            records = list(self.store.get_many(pkeys).values())
+            states = list(self.store.get_many(pkeys).values())
 
-        if not records:
+        if not states:
             return None if first else {}
 
-        # order the records
+        # order the states
         if self.orderings:
-            records = Ordering.sort(records, self.orderings)
+            states = Ordering.sort(states, self.orderings)
 
         # paginate after ordering
         if self.offset_index is not None:
             offset = self.offset_index
             if self.limit_index is not None:
                 limit = self.limit_index
-                records = records[offset:offset+limit]
+                states = states[offset:offset+limit]
             else:
-                records = records[offset:]
+                states = states[offset:]
         elif self.limit_index is not None:
-            records = records[:self.limit_index]
+            states = states[:self.limit_index]
 
         if first:
             if self.selected:
                 return {
-                    k: v for k, v in records[0].items()
+                    k: v for k, v in states[0].items()
                     if k in self.selected or k == self.store.pkey_name
                 }
             else:
-                return records[0]
+                return states[0]
 
-        record_map = OrderedDict()
-        for record in records:
+        state_map = OrderedDict()
+        for state in states:
             # get projection of only selected keys
             if self.selected:
-                record = {
-                    k: v for k, v in record.items()
+                state = {
+                    k: v for k, v in state.items()
                     if k in self.selected or k == self.store.pkey_name
                 }
-            record_map[record[self.store.pkey_name]] = record
+            state_map[state[self.store.pkey_name]] = state
 
-        return record_map
+        return state_map
 
     def clear(self):
         self.selected = {}
