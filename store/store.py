@@ -4,14 +4,16 @@ Base Store class.
 
 from collections import OrderedDict
 from threading import RLock
+from copy import deepcopy
 from typing import (
-    Any, Dict, List, Optional, Set,
+    Any, Dict, Optional, Set,
     OrderedDict as OrderedDictType,
-    Iterable, Text, Union
+    Iterable, Text, Union, Callable
 )
 
 from appyratus.memoize import memoized_property
 
+from .transaction import Transaction
 from .symbol import Symbol, SymbolicAttribute, Query
 from .indexer import Indexer
 from .util import to_dict
@@ -24,9 +26,15 @@ class Store:
 
     def __init__(self, primary_key: Text = 'id'):
         self.pkey_name = primary_key
-        self.indexer = Indexer(primary_key)
+        self.indexer = Indexer(self.pkey_name)
         self.records = {}
         self.lock = RLock()
+
+    def __contains__(self, pkey: Any) -> bool:
+        return pkey in self.records
+
+    def __len__(self) -> int:
+        return len(self.records)
 
     @staticmethod
     def symbol() -> Symbol:
@@ -52,58 +60,91 @@ class Store:
         """
         return Symbol()
 
-    def select(self, *targets: Union[SymbolicAttribute, Text]) -> Query:
+    def transaction(self, callback: Optional[Callable]) -> Transaction:
+        return Transaction(self, callback=callback)
+
+    def select(
+        self,
+        *targets: Union[SymbolicAttribute, Text],
+        transaction: Optional[Transaction] = None
+    ) -> Query:
         """
         Build a query over the records in the store.
         """
         return Query(self).select(*targets)
 
-    def get(self, primary_key: Any) -> Optional[Dict]:
+    def get(
+        self,
+        pkey: Any,
+        transaction: Optional[Transaction] = None
+    ) -> Optional[Dict]:
         """
         Return a single record by primary key. If no record exists, return null.
         """
-        records = self.get_many([primary_key])
-        record = records.get(primary_key)
-        return record.copy() if record else None
+        records = self.get_many([pkey])
+        record = records.get(pkey)
+        return record if record else None
 
     def get_many(
-        self, primary_keys: List[Any]
-    ) -> OrderedDictType[Any, Optional[Dict]]:
+        self,
+        pkeys: Iterable[Any],
+        transaction: Optional[Transaction] = None
+    ) -> OrderedDictType[Any, Dict]:
         """
         Return a multiple records by primary key. Records are returned in the
         form of a dict, mapping each primary key to a possibly-null record dict.
         Dict keys have the same order as the order with which they are provided
-        in the `primary_keys` argument.
+        in the `pkey` primary key argument.
         """
+        if transaction is not None:
+            return transaction.get(pkeys)
+
         with self.lock:
             fetched_records = OrderedDict()
-            for key in primary_keys:
+            for key in pkeys:
                 record = self.records.get(key)
-                fetched_records[key] = record
+                if record is not None:
+                    fetched_records[key] = deepcopy(record)
             return fetched_records
 
-    def create(self, record: Any) -> Dict:
+    def create(
+        self,
+        target: Any,
+        transaction: Optional[Transaction] = None
+    ) -> Dict:
         """
         Insert a new record in the store.
         """
-        record_map = self.create_many([record])
+        if transaction is not None:
+            return transaction.create(target)
+
+        record_map = self.create_many([target])
         records = list(record_map.values())
         return records[0]
 
-    def create_many(self, records: List[Any]) -> OrderedDictType[Any, Dict]:
+    def create_many(
+        self,
+        targets: Iterable[Any],
+        transaction: Optional[Transaction] = None
+    ) -> OrderedDictType[Any, Dict]:
         """
         Insert multiple records in the store, returning a mapping of created
         primary key to created record. Dict keys are ordered by insertion.
         """
+        if transaction is not None:
+            return transaction.create_many(targets)
+
         created = OrderedDict()
 
         with self.lock:
-            for record in records:
+            for target in targets:
                 # try to convert instance object to dict
-                if not isinstance(record, dict):
-                    record = to_dict(record)
+                if not isinstance(target, dict):
+                    record = to_dict(target)
+                else:
+                    record = target
 
-                record = record.copy()
+                record = deepcopy(record)
                 pkey = record[self.pkey_name]
 
                 # store in global primary key map
@@ -114,17 +155,27 @@ class Store:
                     self.indexer.insert(record, keys=record.keys())
 
                 # add record to return created dict
-                created[pkey] = record.copy()
+                created[pkey] = deepcopy(record)
 
         return created
 
-    def update(self, record: Any, keys: Optional[Set] = None) -> Dict:
+    def update(
+        self,
+        target: Any,
+        keys: Optional[Set] = None,
+        transaction: Optional[Transaction] = None
+    ) -> Dict:
         """
         Update an existing record in the store, returning the updated record.
         """
+        if transaction is not None:
+            return transaction.update(target, keys=keys)
+
         # try to convert instance object to dict
-        if not isinstance(record, dict):
-            record = to_dict(record)
+        if not isinstance(target, dict):
+            record = to_dict(target)
+        else:
+            record = target
 
         pkey = record[self.pkey_name]
         keys = set(keys or record.keys())
@@ -135,21 +186,30 @@ class Store:
         with self.lock:
             existing_record.update(record)
             self.indexer.update(old_record, existing_record, keys)
-            return record.copy()
+            return deepcopy(record)
 
-    def update_many(self, records: List[Dict]) -> OrderedDictType[Any, Dict]:
+    def update_many(
+        self,
+        targets: Iterable[Any],
+        transaction: Optional[Transaction] = None
+    ) -> OrderedDictType[Any, Dict]:
         """
         Update multiple records in the store, returning a mapping from updated
         record primary key to corresponding record. Dict keys preserve the same
         order of the `records` argument.
         """
+        if transaction is not None:
+            return transaction.update_many(targets)
+
         updated = OrderedDict()
 
         with self.lock:
-            for record in records:
+            for target in targets:
                 # try to convert instance object to dict
-                if not isinstance(record, dict):
-                    record = to_dict(record)
+                if not isinstance(target, dict):
+                    record = to_dict(target)
+                else:
+                    record = target
 
                 pkey = record[self.pkey_name]
                 existing_record = self.records.get(pkey)
@@ -159,13 +219,23 @@ class Store:
 
         return updated
 
-    def delete(self, pkey: Any, keys: Optional[Iterable[Text]] = None) -> None:
+    def delete(
+        self,
+        target: Any,
+        keys: Optional[Iterable[Text]] = None,
+        transaction: Optional[Transaction] = None
+    ) -> None:
         """
         Delete an entire record from the store if no `keys` argument supplied;
         otherwise, drop only the specified keys from the stored record.
         """
-        if isinstance(pkey, dict):
-            pkey = pkey[self.pkey_name]
+        if transaction is not None:
+            return transaction.delete(target, keys=keys)
+
+        if isinstance(target, dict):
+            pkey = target[self.pkey_name]
+        else:
+            pkey = getattr(target, self.pkey_name, target)
         with self.lock:
             if pkey in self.records:
                 if not keys:
@@ -180,13 +250,19 @@ class Store:
                     self.indexer.remove(record, keys=keys)
 
     def delete_many(
-        self, targets: List[Any], keys: Optional[Iterable[Text]] = None
+        self,
+        targets: Iterable[Any],
+        keys: Optional[Iterable[Text]] = None,
+        transaction: Optional[Transaction] = None
     ) -> None:
         """
         Delete multiple entire records from the store if no `keys` argument
         supplied; otherwise, drop only the specified keys from the stored
         records.
         """
+        if transaction is not None:
+            return transaction.delete_many(targets, keys=keys)
+
         with self.lock:
             if not keys:
                 # drop entire objects
@@ -194,7 +270,7 @@ class Store:
                     if isinstance(target, dict):
                         pkey = target[self.pkey_name]
                     else:
-                        pkey = target
+                        pkey = getattr(target, self.pkey_name, pkey)
                     self.delete(pkey)
             else:
                 # drop only the keys/columns

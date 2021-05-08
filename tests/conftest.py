@@ -30,13 +30,13 @@ def click_event() -> Dict:
 
 
 @pytest.fixture(scope='function')
-def store() -> Store:
-    return Store(primary_key='id')
+def store_record_list(press_event, click_event) -> Store:
+    return [press_event, click_event]
 
 
 @pytest.fixture(scope='function')
-def store_record_list(press_event, click_event) -> Store:
-    return [press_event, click_event]
+def store() -> Store:
+    return Store(primary_key='id')
 
 
 @pytest.fixture(scope='function')
