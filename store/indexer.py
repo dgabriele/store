@@ -1,5 +1,5 @@
 """
-IndexManager is an internal class, used by Store.
+Indexer is an internal class, used by Store.
 """
 
 from collections import defaultdict
@@ -11,7 +11,7 @@ from .util import get_hashable
 from .exceptions import NotHashable
 
 
-class IndexManager:
+class Indexer:
     """
     Manages access to B-tree indices for each scalar field of stored records.
     """

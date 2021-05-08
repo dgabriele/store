@@ -13,7 +13,7 @@ from typing import (
 from appyratus.memoize import memoized_property
 
 from .symbol import Symbol, SymbolicAttribute, Query
-from .index_manager import IndexManager
+from .indexer import Indexer
 from .util import to_dict
 
 
@@ -24,7 +24,7 @@ class Store:
 
     def __init__(self, primary_key: Text = 'id'):
         self.pkey_name = primary_key
-        self.indexer = IndexManager(primary_key)
+        self.indexer = Indexer(primary_key)
         self.records = {}
         self.lock = RLock()
 
