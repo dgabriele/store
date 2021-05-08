@@ -145,12 +145,12 @@ class Ordering:
         # sortable to an integer value (which is sortable)
         converters = {
             bytes: lambda x: int.from_bytes(x, byteorder='big'),
-            dict: lambda x: tuple(sorted(x.items())),
-            list: lambda x: tuple(x),
-            set: lambda x: tuple(sorted(x)),
-            datetime: lambda x: str(x),
-            timedelta: lambda x: str(x),
-            date: lambda x: str(x),
+            dict: lambda x: hash(tuple(sorted(x.items()))),
+            list: lambda x: hash(tuple(x)),
+            set: lambda x: hash(tuple(sorted(x))),
+            datetime: lambda x: x.timestamp(),
+            timedelta: lambda x: x.total_seconds(),
+            date: lambda x: x.toordinal(),
         }
 
         # pre-compute the "index" keys by which the records shall be sorted.

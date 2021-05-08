@@ -30,6 +30,10 @@ class Store:
 
     @staticmethod
     def symbol() -> Symbol:
+        """
+        Convenience method for instantiating a new Symbol without having to
+        import it.
+        """
         return Symbol()
 
     @memoized_property
