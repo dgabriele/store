@@ -14,7 +14,8 @@ from typing import (
 from appyratus.memoize import memoized_property
 
 from .transaction import Transaction
-from .symbol import Symbol, SymbolicAttribute, Query
+from .symbol import Symbol, SymbolicAttribute
+from .query import Query
 from .indexer import Indexer
 from .util import to_dict
 

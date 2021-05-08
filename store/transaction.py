@@ -7,7 +7,8 @@ from typing import (
 from copy import deepcopy
 
 from .util import to_dict
-from .symbol import SymbolicAttribute, Query
+from .symbol import SymbolicAttribute
+from .query import Query
 
 
 class Transaction:

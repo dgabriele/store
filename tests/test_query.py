@@ -1,9 +1,8 @@
 from store.constants import OP_CODE
-from store.symbol import (
-    Query, Symbol, SymbolicAttribute,
-    Comparison, LogicalOperation,
-    Ordering
-)
+from store.symbol import Symbol, SymbolicAttribute
+from store.query import Query
+from store.predicate import ConditionalExpression, BooleanExpression
+from store.ordering import Ordering
 
 
 def test_symbol_adds_attributes():
@@ -24,7 +23,7 @@ def test_comparison_predicates_created():
     cmp5 = user.thing >= 1
     cmp6 = user.thing <= 1
 
-    assert isinstance(cmp1, Comparison)
+    assert isinstance(cmp1, ConditionalExpression)
 
     assert cmp1.op == OP_CODE.EQ
     assert cmp1.key == 'thing'
@@ -58,13 +57,13 @@ def test_logical_operation_created():
     p2 = (user.age > 4)
 
     log_op1 = p1 & p2
-    assert isinstance(log_op1, LogicalOperation)
+    assert isinstance(log_op1, BooleanExpression)
     assert log_op1.op == OP_CODE.AND
     assert log_op1.lhs is p1
     assert log_op1.rhs is p2
 
     log_op2 = p1 | p2
-    assert isinstance(log_op2, LogicalOperation)
+    assert isinstance(log_op2, BooleanExpression)
     assert log_op2.op == OP_CODE.OR
     assert log_op2.lhs is p1
     assert log_op2.rhs is p2
@@ -121,14 +120,14 @@ def test_build_query(store_with_data):
     query.predicate = None
     query.where(pred, pred)
     assert ret_query is query
-    assert isinstance(query.predicate, LogicalOperation)
+    assert isinstance(query.predicate, BooleanExpression)
     assert query.predicate.op == OP_CODE.AND
     assert query.predicate.lhs is pred
     assert query.predicate.rhs is pred
 
     query.where(pred)
-    assert isinstance(query.predicate.rhs, Comparison)
-    assert isinstance(query.predicate.lhs, LogicalOperation)
+    assert isinstance(query.predicate.rhs, ConditionalExpression)
+    assert isinstance(query.predicate.lhs, BooleanExpression)
 
 
 def test_query_execute_normal(store_with_data, click_event):
