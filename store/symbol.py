@@ -4,7 +4,7 @@ from functools import reduce
 from datetime import datetime, timedelta, date
 from typing import Any, List, Optional, OrderedDict, Text, Union, Dict, Iterable
 
-from .util import union
+from .util import union, get_hashable
 from .exceptions import NotSelectable
 from .constants import OP_CODE
 
@@ -37,7 +37,7 @@ class Predicate:
 
             if op == OP_CODE.EQ:
                 computed_ids = index.get(v, empty)
-            elif op == OP_CODE.NEQ:
+            elif op == OP_CODE.NE:
                 computed_ids = union([
                     id_set for v_idx, id_set in index.items()
                     if v_idx != v
@@ -62,7 +62,7 @@ class Predicate:
                 offset = None
                 interval = None
 
-                if op == OP_CODE.GEQ:
+                if op == OP_CODE.GE:
                     offset = bisect.bisect_left(keys, v)
                     interval = slice(offset, None, 1)
 
@@ -189,25 +189,25 @@ class SymbolicAttribute:
         self.key = key
 
     def __lt__(self, value: Any) -> Comparison:
-        return Comparison(OP_CODE.LT, self, value)
+        return Comparison(OP_CODE.LT, self, get_hashable(value))
 
     def __gt__(self, value: Any) -> Comparison:
-        return Comparison(OP_CODE.GT, self, value)
+        return Comparison(OP_CODE.GT, self, get_hashable(value))
 
     def __ge__(self, value: Any) -> Comparison:
-        return Comparison(OP_CODE.GE, self, value)
+        return Comparison(OP_CODE.GE, self, get_hashable(value))
 
     def __le__(self, value: Any) -> Comparison:
-        return Comparison(OP_CODE.LE, self, value)
+        return Comparison(OP_CODE.LE, self, get_hashable(value))
 
     def __eq__(self, value: Any) -> Comparison:
-        return Comparison(OP_CODE.EQ, self, value)
+        return Comparison(OP_CODE.EQ, self, get_hashable(value))
 
     def __ne__(self, value: Any) -> Comparison:
-        return Comparison(OP_CODE.NE, self, value)
+        return Comparison(OP_CODE.NE, self, get_hashable(value))
 
     def is_one_of(self, value: Iterable) -> Comparison:
-        return Comparison(OP_CODE.IN, self, value)
+        return Comparison(OP_CODE.IN, self, get_hashable(value))
 
     @property
     def asc(self) -> Ordering:

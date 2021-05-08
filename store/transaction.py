@@ -19,10 +19,21 @@ class Transaction:
         self.mutations = []
         self.callback = callback
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if exc_type:
+            self.rollback()
+            return False
+        else:
+            self.commit()
+            return True
+
     def commit(self):
         # flush mutations to the backend store,
         # replaying front store calls to the back store.
-        for func_name, args, kwargs in mutations:
+        for func_name, args, kwargs in self.mutations:
             func = getattr(self.back, func_name)
             func(*args, **kwargs)
 

@@ -36,6 +36,10 @@ class Store:
     def __len__(self) -> int:
         return len(self.records)
 
+    def clear(self):
+        self.indexer = Indexer(self.pkey_name)
+        self.records = {}
+
     @staticmethod
     def symbol() -> Symbol:
         """
@@ -60,13 +64,12 @@ class Store:
         """
         return Symbol()
 
-    def transaction(self, callback: Optional[Callable]) -> Transaction:
+    def transaction(self, callback: Optional[Callable] = None) -> Transaction:
         return Transaction(self, callback=callback)
 
     def select(
         self,
         *targets: Union[SymbolicAttribute, Text],
-        transaction: Optional[Transaction] = None
     ) -> Query:
         """
         Build a query over the records in the store.
@@ -76,7 +79,6 @@ class Store:
     def get(
         self,
         pkey: Any,
-        transaction: Optional[Transaction] = None
     ) -> Optional[Dict]:
         """
         Return a single record by primary key. If no record exists, return null.
@@ -88,7 +90,6 @@ class Store:
     def get_many(
         self,
         pkeys: Iterable[Any],
-        transaction: Optional[Transaction] = None
     ) -> OrderedDictType[Any, Dict]:
         """
         Return a multiple records by primary key. Records are returned in the
@@ -96,9 +97,6 @@ class Store:
         Dict keys have the same order as the order with which they are provided
         in the `pkey` primary key argument.
         """
-        if transaction is not None:
-            return transaction.get(pkeys)
-
         with self.lock:
             fetched_records = OrderedDict()
             for key in pkeys:
@@ -110,14 +108,10 @@ class Store:
     def create(
         self,
         target: Any,
-        transaction: Optional[Transaction] = None
     ) -> Dict:
         """
         Insert a new record in the store.
         """
-        if transaction is not None:
-            return transaction.create(target)
-
         record_map = self.create_many([target])
         records = list(record_map.values())
         return records[0]
@@ -125,15 +119,11 @@ class Store:
     def create_many(
         self,
         targets: Iterable[Any],
-        transaction: Optional[Transaction] = None
     ) -> OrderedDictType[Any, Dict]:
         """
         Insert multiple records in the store, returning a mapping of created
         primary key to created record. Dict keys are ordered by insertion.
         """
-        if transaction is not None:
-            return transaction.create_many(targets)
-
         created = OrderedDict()
 
         with self.lock:
@@ -163,14 +153,10 @@ class Store:
         self,
         target: Any,
         keys: Optional[Set] = None,
-        transaction: Optional[Transaction] = None
     ) -> Dict:
         """
         Update an existing record in the store, returning the updated record.
         """
-        if transaction is not None:
-            return transaction.update(target, keys=keys)
-
         # try to convert instance object to dict
         if not isinstance(target, dict):
             record = to_dict(target)
@@ -191,16 +177,12 @@ class Store:
     def update_many(
         self,
         targets: Iterable[Any],
-        transaction: Optional[Transaction] = None
     ) -> OrderedDictType[Any, Dict]:
         """
         Update multiple records in the store, returning a mapping from updated
         record primary key to corresponding record. Dict keys preserve the same
         order of the `records` argument.
         """
-        if transaction is not None:
-            return transaction.update_many(targets)
-
         updated = OrderedDict()
 
         with self.lock:
@@ -223,15 +205,11 @@ class Store:
         self,
         target: Any,
         keys: Optional[Iterable[Text]] = None,
-        transaction: Optional[Transaction] = None
     ) -> None:
         """
         Delete an entire record from the store if no `keys` argument supplied;
         otherwise, drop only the specified keys from the stored record.
         """
-        if transaction is not None:
-            return transaction.delete(target, keys=keys)
-
         if isinstance(target, dict):
             pkey = target[self.pkey_name]
         else:
@@ -253,16 +231,12 @@ class Store:
         self,
         targets: Iterable[Any],
         keys: Optional[Iterable[Text]] = None,
-        transaction: Optional[Transaction] = None
     ) -> None:
         """
         Delete multiple entire records from the store if no `keys` argument
         supplied; otherwise, drop only the specified keys from the stored
         records.
         """
-        if transaction is not None:
-            return transaction.delete_many(targets, keys=keys)
-
         with self.lock:
             if not keys:
                 # drop entire objects
