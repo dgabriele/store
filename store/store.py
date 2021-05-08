@@ -7,10 +7,12 @@ from threading import RLock
 from typing import (
     Any, Dict, List, Optional, Set,
     OrderedDict as OrderedDictType,
-    Iterable, Text
+    Iterable, Text, Union
 )
 
-from .symbol import Symbol
+from appyratus.memoize import memoized_property
+
+from .symbol import Symbol, SymbolicAttribute, Query
 from .index_manager import IndexManager
 from .util import to_dict
 
@@ -30,8 +32,27 @@ class Store:
     def symbol() -> Symbol:
         return Symbol()
 
-    def select(self, *args, **kwargs) -> List[Dict]:
-        raise NotImplementedError()
+    @memoized_property
+    def entry(self) -> Symbol:
+        """
+        For convenience, this can be used when forming queries, like:
+
+        query = store.select(
+            store.entry.id,
+            store.entry.email,
+            store.entry.password,
+        ).where(
+            store.entry.name == 'John'
+        )
+
+        """
+        return Symbol()
+
+    def select(self, *targets: Union[SymbolicAttribute, Text]) -> Query:
+        """
+        Build a query over the records in the store.
+        """
+        return Query(self).select(*targets)
 
     def get(self, primary_key: Any) -> Optional[Dict]:
         """
