@@ -1,5 +1,5 @@
 """
-Base Store class.
+class Store
 """
 
 from collections import OrderedDict
@@ -14,7 +14,7 @@ from typing import (
 
 from appyratus.memoize import memoized_property
 
-from .interfaces import StoreInterface
+from .interfaces import StateDictInterface, StoreInterface
 from .transaction import Transaction
 from .symbol import Symbol, SymbolicAttribute
 from .query import Query
@@ -107,7 +107,8 @@ class Store(StoreInterface):
             other_thing = trans.get(...)
             other_thing.delete()
         """
-        return Transaction(self, callback=callback)
+        front = type(self)(self.pkey_name, dict_type=self.dict_type)
+        return Transaction(self, front, callback=callback)
 
     def select(
         self,
@@ -183,7 +184,10 @@ class Store(StoreInterface):
                 if not isinstance(target, dict):
                     record = to_dict(target)
                 else:
-                    record = target
+                    if isinstance(target, StateDict):
+                        record = dict(target)
+                    else:
+                        record = target
 
                 record = deepcopy(record)
                 pkey = record[self.pkey_name]

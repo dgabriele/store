@@ -1,3 +1,7 @@
+"""
+class Ordering
+"""
+
 from datetime import datetime, timedelta, date
 from typing import Iterable, List, Dict, Sequence
 
@@ -10,6 +14,7 @@ class Ordering(OrderingInterface):
     """
 
     def __init__(self, attr, desc: bool) -> None:
+        super().__init__()
         self.attr = attr
         self.desc = desc
 

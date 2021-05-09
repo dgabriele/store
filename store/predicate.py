@@ -1,23 +1,49 @@
+"""
+Classes used to form predicate logic processed by Query.execute().
+"""
+
 import bisect
 
-from typing import Any, Optional, Text
+from typing import Any, Set, Text
 
 from .constants import OP_CODE
 from .util import union
 
 
 class Predicate:
+    """
+    Predicate abstract base class. Predicates can be composed into a tree using
+    | and & operators.
+    """
+
     def __init__(self, op_code: Text) -> None:
         self.op_code = op_code
 
     def __and__(self, other: Any) -> 'BooleanExpression':
+        """
+        Performs pred1 AND pred2, generating a new predicate. For example:
+        ```
+        (user.email == 'foo@bar.com) & (user.created_at > cutoff_date)
+        ```
+        """
         return BooleanExpression(OP_CODE.AND, self, other)
 
     def __or__(self, other: Any) -> 'BooleanExpression':
+        """
+        Performs pred1 OR pred2, generating a new predicate. For example:
+        ```
+        (user.email == 'foo@bar.com) | (user.created_at > cutoff_date)
+        ```
+        """
         return BooleanExpression(OP_CODE.OR, self, other)
 
     @classmethod
-    def evaluate(cls, store, predicate: 'Predicate'):
+    def evaluate(cls, store, predicate: 'Predicate') -> Set:
+        """
+        Evaluate the predicate recursively, producting set of primary keys in
+        the given store whose records match the predicate's logic. This is used
+        in `Query` execution.
+        """
         indexer = store.indexer
 
         if predicate is None:
@@ -27,7 +53,10 @@ class Predicate:
         empty = set()
         computed_ids = set()
 
+        # is predicate >, <, ==, !=, >=, <=, one_of, etc.?
         if isinstance(predicate, ConditionalExpression):
+            # fetch the ID subset according to the predicate
+            # and union them into the accumulating computed_ids set.
             key = predicate.attr.key
             val = predicate.value
             index = indexer.indices[key]
@@ -102,14 +131,29 @@ class Predicate:
 
 
 class ConditionalExpression(Predicate):
+    """
+    ConditionalExpression represent statements like:
+    ```
+    user.email == 'foo@bar.baz'
+    user.name != 'Bob'
+    user.age > 18
+    ```
+    """
     def __init__(self, op_code: Text, attr, value: Any) -> None:
         super().__init__(op_code)
-        self.attr = attr
+        self.attr = attr        # <- a SymbolicAttribute object
         self.key = attr.key
         self.value = value
 
 
 class BooleanExpression(Predicate):
+    """
+    BooleanExpression represent statements like:
+    ```
+    pred = (user.email == 'foo@bar.baz') & (user.name != 'Bob')
+    pred |= (user.age > 18)
+    ```
+    """
     def __init__(self, op_code: Text, lhs: Predicate, rhs: Predicate) -> None:
         super().__init__(op_code)
         self.lhs = lhs

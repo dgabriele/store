@@ -2,8 +2,9 @@
 Global Pytest fixtures and configuration.
 """
 
+from store.transaction import Transaction
 from uuid import uuid4
-from typing import Dict
+from typing import Dict, List, Type
 
 import pytest
 
@@ -30,13 +31,19 @@ def click_event() -> Dict:
 
 
 @pytest.fixture(scope='function')
-def store_state_list(press_event, click_event) -> Store:
+def store_state_list(press_event, click_event) -> List[Dict]:
     return [press_event, click_event]
 
 
 @pytest.fixture(scope='function')
 def store() -> Store:
-    return Store(pkey='id')
+    return Store('id')
+
+
+
+@pytest.fixture(scope='function')
+def transaction(store) -> Transaction:
+    return Transaction(store, Store(store.pkey_name))
 
 
 @pytest.fixture(scope='function')
@@ -47,7 +54,7 @@ def store_with_data(store, store_state_list) -> Store:
 
 
 @pytest.fixture(scope='function')
-def Person():
+def Person() -> Type:
     class Person:
         def __init__(self, id, name, age, lucky_numbers) -> None:
             self.id = id

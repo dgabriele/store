@@ -3,7 +3,7 @@ Indexer is an internal class, used by Store.
 """
 
 from collections import defaultdict
-from typing import Any, Dict, Optional, Iterable, Text
+from typing import Dict, Optional, Iterable, Text
 
 from BTrees.OOBTree import BTree # type: ignore
 

@@ -39,6 +39,7 @@ class Query(QueryInterface):
     """
 
     def __init__(self, store: StoreInterface) -> None:
+        super().__init__()
         self.store = store
         self.selected: Dict[Text, SymbolicAttribute] = {}
         self.orderings: List[Ordering] = []

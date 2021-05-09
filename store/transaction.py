@@ -9,8 +9,9 @@ from copy import deepcopy
 from .util import get_pkeys, to_dict
 from .symbol import SymbolicAttribute
 from .query import Query
-from .state import StateDict
-from .interfaces import TransactionInterface
+from .interfaces import (
+    QueryInterface, StoreInterface, TransactionInterface, StateDictInterface
+)
 
 
 class Transaction(TransactionInterface):
@@ -25,11 +26,10 @@ class Transaction(TransactionInterface):
     applied to the back store.
     """
 
-    def __init__(self, back, front=None, callback: Optional[Callable] = None):
-        from store.store import Store
-
-        self.back: Store = back
-        self.front: Store = front or Store(back.pkey_name)
+    def __init__(self, back, front, callback: Optional[Callable] = None):
+        super().__init__()
+        self.back: StoreInterface = back
+        self.front: StoreInterface = front
         self.callback = callback
         self.journal: List[Tuple] = []
 
@@ -93,7 +93,7 @@ class Transaction(TransactionInterface):
     
     def create_many(
         self, records: Iterable[Any]
-    ) -> OrderedDictType[Any, StateDict]:
+    ) -> OrderedDictType[Any, StateDictInterface]:
         """
         Insert multiple record dicts.
         """
@@ -102,11 +102,11 @@ class Transaction(TransactionInterface):
         # create records solely in front store
         return self.front.create_many(records)
 
-    def select(self, *targets: Union[SymbolicAttribute, Text]) -> Query:
+    def select(self, *targets: Union[SymbolicAttribute, Text]) -> QueryInterface:
         """
         Generate a query.
         """
-        def merge(query: Query, back_result: Dict[Any, StateDict]):
+        def merge(query: Query, back_result: Dict[Any, StateDictInterface]):
             front_query = query.copy(self.front)
             front_result = front_query.execute()
             if isinstance(front_result, dict):
@@ -126,7 +126,7 @@ class Transaction(TransactionInterface):
 
         return query
     
-    def get(self, target: Any) -> Optional[StateDict]:
+    def get(self, target: Any) -> Optional[StateDictInterface]:
         """
         Get a single record by ID.
         """
@@ -137,15 +137,18 @@ class Transaction(TransactionInterface):
         if target not in self.front:
             record = self.back.get(pkey)
             if record is not None:
-                self.front.create(record)
+                record = self.front.create(record)
         else:
             record = self.front.get(pkey)
 
-        record.transaction = self
+        if record is not None:
+            record.transaction = self
 
         return record
 
-    def get_many(self, targets: Iterable[Any]) -> OrderedDictType[Any, StateDict]:
+    def get_many(
+        self, targets: Iterable[Any]
+    ) -> OrderedDictType[Any, StateDictInterface]:
         """
         Get a multiple records by ID.
         """
@@ -164,7 +167,9 @@ class Transaction(TransactionInterface):
 
         return records
 
-    def update(self, target: Any, keys: Optional[Set] = None) -> StateDict:
+    def update(
+        self, target: Any, keys: Optional[Set] = None
+    ) -> StateDictInterface:
         """
         Update a single record.
         """
@@ -189,7 +194,7 @@ class Transaction(TransactionInterface):
 
     def update_many(
         self, targets: Iterable[Dict]
-    ) -> OrderedDictType[Any, StateDict]:
+    ) -> OrderedDictType[Any, StateDictInterface]:
         """
         Update multiple records.
         """

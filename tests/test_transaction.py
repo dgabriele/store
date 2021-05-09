@@ -1,8 +1,5 @@
-from store.transaction import Transaction
-
-
-def test_create_in_transaction(store, click_event):
-    trans = Transaction(store)
+def test_create_in_transaction(store, click_event, transaction):
+    trans = transaction
     record = trans.create(click_event)
     pkey = click_event['id']
 
@@ -12,8 +9,8 @@ def test_create_in_transaction(store, click_event):
     assert trans.journal[0][0] == 'create'
 
 
-def test_create_many_in_transaction(store, click_event, press_event):
-    trans = Transaction(store)
+def test_create_many_in_transaction(store, click_event, press_event, transaction):
+    trans = transaction
     record = trans.create_many([click_event, press_event])
 
     for event in [click_event, press_event]:
@@ -25,8 +22,8 @@ def test_create_many_in_transaction(store, click_event, press_event):
     assert trans.journal[0][0] == 'create_many'
 
 
-def test_get_in_transaction(store, click_event):
-    trans = Transaction(store)
+def test_get_in_transaction(store, click_event, transaction):
+    trans = transaction
     trans.create(click_event)
     assert len(trans.journal) == 1
 
@@ -35,8 +32,8 @@ def test_get_in_transaction(store, click_event):
     assert len(trans.journal) == 1
 
 
-def test_get_many_in_transaction(store, click_event, press_event):
-    trans = Transaction(store)
+def test_get_many_in_transaction(store, click_event, press_event, transaction):
+    trans = transaction
     trans.create_many([click_event, press_event])
     assert len(trans.journal) == 1
 
@@ -45,13 +42,15 @@ def test_get_many_in_transaction(store, click_event, press_event):
     assert len(trans.journal) == 1
 
 
-def test_update_in_transaction(store_with_data, click_event):
+def test_update_in_transaction(store_with_data, click_event, transaction):
     old_x = click_event['position']['x']
     new_x = 1213243
 
     click_event['position']['x'] = new_x
 
-    trans = Transaction(store_with_data)
+    trans = transaction
+    trans.store = store_with_data
+
     trans.update(click_event)
 
     assert len(trans.journal) == 1
@@ -64,7 +63,7 @@ def test_update_in_transaction(store_with_data, click_event):
     assert record['position']['x'] == old_x
 
 
-def test_update_many_in_transaction(store_with_data, click_event, press_event):
+def test_update_many_in_transaction(store_with_data, click_event, press_event, transaction):
     old_x = click_event['position']['x']
     new_x = 1213243
 
@@ -74,7 +73,9 @@ def test_update_many_in_transaction(store_with_data, click_event, press_event):
     click_event['position']['x'] = new_x
     press_event['char'] = new_char
 
-    trans = Transaction(store_with_data)
+    trans = transaction
+    trans.store = store_with_data
+
     trans.update_many([click_event, press_event])
 
     assert len(trans.journal) == 1
@@ -95,8 +96,9 @@ def test_update_many_in_transaction(store_with_data, click_event, press_event):
     assert record['char'] == old_char
 
 
-def test_delete_in_transaction(store_with_data, click_event):
-    trans = Transaction(store_with_data)
+def test_delete_in_transaction(store_with_data, click_event, transaction):
+    trans = transaction
+    trans.store = store_with_data
     trans.delete(click_event)
     pkey = click_event['id']
     
@@ -105,8 +107,9 @@ def test_delete_in_transaction(store_with_data, click_event):
     assert pkey in trans.back
 
 
-def test_delete_many_in_transaction(store_with_data, click_event, press_event):
-    trans = Transaction(store_with_data)
+def test_delete_many_in_transaction(store_with_data, click_event, press_event, transaction):
+    trans = transaction
+    trans.store = store_with_data
     trans.delete_many([click_event, press_event])
 
     assert len(trans.journal) == 1

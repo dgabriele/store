@@ -1,4 +1,8 @@
-from typing import Any, Optional, Text, Iterable
+"""
+class Symbol
+"""
+
+from typing import Any, Optional, Text, Iterable, Type, Dict
 
 from .util import get_hashable
 from .constants import OP_CODE
@@ -7,10 +11,19 @@ from .interfaces import OrderingInterface, SymbolicAttributeInterface
 
 
 class SymbolicAttribute(SymbolicAttributeInterface):
+    """
+    SymbolicAttribute instances are returned via Symbol.__getattr__. For
+    example, doing `symbol.foo` will return a SymbolicAttribute with its key
+    attribute having the value "foo". These objects are used in the
+    implementation of the Query class.
+    """
+
     def __init__(self, key: Text, symbol: Optional['Symbol'] = None) -> None:
+        super().__init__()
+
         from store.ordering import Ordering
 
-        self.ordering_class = Ordering
+        self.ordering_class: Type[OrderingInterface] = Ordering
         self.symbol = symbol
         self.key = key
 
@@ -32,26 +45,77 @@ class SymbolicAttribute(SymbolicAttributeInterface):
     def __ne__(self, value: Any) -> ConditionalExpression:
         return ConditionalExpression(OP_CODE.NE, self, get_hashable(value))
 
-    def is_one_of(self, value: Iterable) -> ConditionalExpression:
+    def one_of(self, value: Iterable) -> ConditionalExpression:
+        """
+        Example:
+        ```
+        user = store.symbol()
+        query.where(user.email.one_of(subsriber_email_list))
+        ```
+        """
         return ConditionalExpression(OP_CODE.IN, self, get_hashable(value))
 
     @property
     def asc(self) -> OrderingInterface:
+        """
+        Used like:
+        ```
+        user = store.symbol()
+        query.order_by(user.email.asc, user.created_at.desc)
+        ```
+        """
         return self.ordering_class(self, desc=False)
 
     @property
     def desc(self) -> OrderingInterface:
+        """
+        Used like:
+        ```
+        user = store.symbol()
+        query.order_by(user.email.desc, user.created_at.asc)
+        ```
+        """
         return self.ordering_class(self, desc=True)
 
 
 class Symbol:
+    """
+    Symbols are used as tokens, whose attributes are used to construct arguments
+    to various Query instance methods that build a pending "select statment." For example,
+    ```
+    user = store.symbol()
+
+    get_eligable_users = store.select(      # <- store.select returns a Query object.
+        user.name, user.email
+    ).where(
+        user.created_at > cutoff_date
+    )
+
+    eligable_users = get_eligable_users()
+    ```
+    """
+
     Attribute = SymbolicAttribute
 
     def __init__(self):
-        self.attrs = {}
+        self.attrs: Dict[Text, 'SymbolicAttribute'] = {}
 
     def __getattr__(self, key: Text) -> 'SymbolicAttribute':
+        """
+        This allows the symbol to generate dynamic SymbolicAttributes via
+        attribute notation. For example:
+        ```
+        user = store.symbol()
+        attr = user.email
+        assert isinstance(attr, SymbolicAttribute)
+        assert attr.key == 'email'
+        ```
+
+        The SymbolicAttribute is memoized in self.attrs.
+        """
         if key not in self.attrs:
+            # create and memoize SymbolicAttribute
             attr = SymbolicAttribute(key, symbol=self)
             self.attrs[key] = attr
+
         return self.attrs[key]

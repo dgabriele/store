@@ -1,5 +1,6 @@
+from threading import RLock
 from typing import (
-    Any, Dict, Iterator, Optional, Set, OrderedDict,
+    Any, Dict, Optional, Set, OrderedDict,
     Iterable, Text, Union, Callable,
 )
 
@@ -7,20 +8,11 @@ from .predicate import ConditionalExpression
 
 
 class StateDictInterface(dict):
+
+    store: Optional['StoreInterface'] = None
+    transaction: Optional['TransactionInterface'] = None
+
     def update(self, values: Dict, flush: bool = True) -> 'StateDictInterface':
-        super().update(values)
-        return self
-
-    def setdefault(self, key: Any, value: Any) -> Any:
-        return super().setdefault(key, value)
-
-    def clear(self):
-        raise NotImplementedError()
-
-    def clean(self):
-        raise NotImplementedError()
-
-    def save(self, keys: Optional[Set[Text]] = None) -> 'StateDictInterface':
         raise NotImplementedError()
 
     def delete(self, keys: Optional[Set[Text]] = None) -> 'StateDictInterface':
@@ -35,8 +27,17 @@ class OrderingInterface:
     attr: 'SymbolicAttributeInterface'
     desc: bool = False
 
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
 
 class SymbolicAttributeInterface:
+
+    key: Text
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
     def __lt__(self, value: Any) -> ConditionalExpression:
         raise NotImplementedError()
 
@@ -55,7 +56,7 @@ class SymbolicAttributeInterface:
     def __ne__(self, value: Any) -> ConditionalExpression:
         raise NotImplementedError()
 
-    def is_one_of(self, value: Iterable) -> ConditionalExpression:
+    def one_of(self, value: Iterable) -> ConditionalExpression:
         raise NotImplementedError()
 
     @property
@@ -68,6 +69,15 @@ class SymbolicAttributeInterface:
 
 
 class QueryInterface:
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def subscribe(self, callback: Callable) -> None:
+        raise NotImplementedError()
+
+    def unsubscribe(self, callback: Callable) -> None:
+        raise NotImplementedError()
+
     def execute(self, first=False) -> Optional[Union[StateDictInterface, Dict]]:
         raise NotImplementedError()
 
@@ -77,13 +87,25 @@ class QueryInterface:
     def copy(self, store: Optional['StoreInterface'] = None) -> 'QueryInterface':
         raise NotImplementedError()
 
-    def select(self, *targets: Union[Text, SymbolicAttributeInterface]) -> 'QueryInterface':
+    def select(
+        self,
+        *targets: Union[Text, SymbolicAttributeInterface],
+        append: bool = True,
+    ) -> 'QueryInterface':
         raise NotImplementedError()
 
-    def order_by(self, *orderings: Union[Text, SymbolicAttributeInterface, OrderingInterface]) -> 'QueryInterface':
+    def order_by(
+        self,
+        *orderings: Union[Text, SymbolicAttributeInterface, OrderingInterface],
+        append: bool = True
+    ) -> 'QueryInterface':
         raise NotImplementedError()
 
-    def where(self, *predicates) -> 'QueryInterface':
+    def where(
+        self,
+        *predicates,
+        append: bool = True
+    ) -> 'QueryInterface':
         raise NotImplementedError()
 
     def limit(self, limit: int) -> 'QueryInterface':
@@ -97,13 +119,16 @@ class TransactionInterface:
 
     store: 'StoreInterface'
 
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
     def commit(self):
         raise NotImplementedError()
 
     def rollback(self):
         raise NotImplementedError()
 
-    def create(self, record: Dict) -> Dict:
+    def create(self, record: Dict) -> StateDictInterface:
         raise NotImplementedError()
     
     def create_many(self, records: Iterable[Any]) -> OrderedDict[Any, StateDictInterface]:
@@ -112,7 +137,7 @@ class TransactionInterface:
     def select(self, *targets: Union[SymbolicAttributeInterface, Text]) -> QueryInterface:
         raise NotImplementedError()
     
-    def get(self, targets: Any) -> Optional[StateDictInterface]:
+    def get(self, target: Any) -> Optional[StateDictInterface]:
         raise NotImplementedError()
 
     def get_many(self, targets: Iterable[Any]) -> OrderedDict[Any, StateDictInterface]:
@@ -141,6 +166,10 @@ class StoreInterface:
     pkey_name: Text
     entry: SymbolicAttributeInterface
     records: Dict[Text, Dict]
+    lock: RLock
+    
+    def __init__(self, *args, **kwargs) -> None:
+        pass
 
     @staticmethod
     def symbol() -> SymbolicAttributeInterface:
