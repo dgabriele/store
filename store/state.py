@@ -21,7 +21,6 @@ class StateDict(StateDictInterface):
         super().__init__(*args, **kwargs)
         self.store: Optional[StoreInterface] = None
         self.transaction: Optional[TransactionInterface] = None
-        self._backend: Optional[Union[TransactionInterface, StoreInterface]] = None
 
     @property
     def backend(self) -> Optional[Union[TransactionInterface, StoreInterface]]:
@@ -29,21 +28,21 @@ class StateDict(StateDictInterface):
         Return the Transaction associated with this dict; otherwise, return the
         associated store -- or None.
         """
-        return self._backend
+        return self.transaction or self.store
 
     def __setitem__(self, key: Any, value: Any):
         """
         Update the item in the Store as well as the dict itself.
         """
         super().__setitem__(key, value)
-        self._backend.update(self, {key})
+        self.backend.update(self, {key})
 
     def __delitem__(self, key: Any):
         """
         Delete the item from the stored record as well as from the dict itself.
         """
         super().__delitem__(key)
-        self._backend.delete(self, {key})
+        self.backend.delete(self, {key})
 
     def __deepcopy__(self, memo) -> 'StateDict':
         """
@@ -60,9 +59,9 @@ class StateDict(StateDictInterface):
         Update values in the dict itself while syncing these changes to the
         associated store at the same time.
         """
-        if flush:
-            self._backend.update(self, set(values.keys()))
         super().update(values)
+        if flush:
+            self.backend.update(self, set(values.keys()))
         return self
 
     def setdefault(self, key: Any, value: Any) -> Any:
@@ -72,7 +71,7 @@ class StateDict(StateDictInterface):
         need be.
         """
         if key not in self:
-            self._backend.update(self, key)
+            self.backend.update(self, key)
 
         return super().setdefault(key, value)
 

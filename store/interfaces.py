@@ -1,3 +1,7 @@
+"""
+Public Interface classes for internal components
+"""
+
 from threading import RLock
 from typing import (
     Any, Dict, Optional, Set, OrderedDict,
@@ -12,8 +16,9 @@ class StateDictInterface(dict):
     store: Optional['StoreInterface'] = None
     transaction: Optional['TransactionInterface'] = None
 
-    def update(self, values: Dict, flush: bool = True) -> 'StateDictInterface':
-        raise NotImplementedError()
+    def update(self, values: Dict, **kwargs) -> 'StateDictInterface':
+        super().update(values)
+        return self
 
     def delete(self, keys: Optional[Set[Text]] = None) -> 'StateDictInterface':
         raise NotImplementedError()

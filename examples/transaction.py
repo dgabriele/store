@@ -16,8 +16,7 @@ person = store.create({
 with store.transaction() as transaction:
     person = transaction.get(1)
     person['sex'] = 'F'
-    person['weight'] -= 15
-    person.save()
+    person.update({'weight': person['weight'] - 15})
 
     # see that stored state is still unchanged
     person = store.get(1)
