@@ -41,8 +41,8 @@ def store() -> Store:
 
 @pytest.fixture(scope='function')
 def store_with_data(store, store_state_list) -> Store:
-    for state in store_state_list:
-        store.create(state)
+    for record in store_state_list:
+        store.create(record)
     return store
 
 

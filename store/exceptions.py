@@ -27,5 +27,19 @@ class NotHashable(StoreException):
 
 
 class NotSelectable(StoreException):
+    """
+    Exception raised when an unrecognized object is passed into query.select().
+    """
+
     def __init__(self, value: Any) -> None:
         super().__init__(f'object not selectable: {value}')
+
+
+class NotOrderable(StoreException):
+    """
+    Exception raised when a type that cannot be sorted is used in an query's
+    order_by expression.
+    """
+    
+    def __init__(self, key: Text, value: Any) -> None:
+        super().__init__(f'{type(value)} cannot be ordered (key: {key})')

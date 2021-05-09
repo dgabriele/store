@@ -25,27 +25,27 @@ def test_comparison_predicates_created():
 
     assert isinstance(cmp1, ConditionalExpression)
 
-    assert cmp1.op == OP_CODE.EQ
+    assert cmp1.op_code == OP_CODE.EQ
     assert cmp1.key == 'thing'
     assert cmp1.value == 1
 
-    assert cmp2.op == OP_CODE.NE
+    assert cmp2.op_code == OP_CODE.NE
     assert cmp2.key == 'thing'
     assert cmp2.value == 1
 
-    assert cmp3.op == OP_CODE.GT
+    assert cmp3.op_code == OP_CODE.GT
     assert cmp3.key == 'thing'
     assert cmp3.value == 1
 
-    assert cmp4.op == OP_CODE.LT
+    assert cmp4.op_code == OP_CODE.LT
     assert cmp4.key == 'thing'
     assert cmp4.value == 1
 
-    assert cmp5.op == OP_CODE.GE
+    assert cmp5.op_code == OP_CODE.GE
     assert cmp5.key == 'thing'
     assert cmp5.value == 1
 
-    assert cmp6.op == OP_CODE.LE
+    assert cmp6.op_code == OP_CODE.LE
     assert cmp6.key == 'thing'
     assert cmp6.value == 1
 
@@ -58,13 +58,13 @@ def test_logical_operation_created():
 
     log_op1 = p1 & p2
     assert isinstance(log_op1, BooleanExpression)
-    assert log_op1.op == OP_CODE.AND
+    assert log_op1.op_code == OP_CODE.AND
     assert log_op1.lhs is p1
     assert log_op1.rhs is p2
 
     log_op2 = p1 | p2
     assert isinstance(log_op2, BooleanExpression)
-    assert log_op2.op == OP_CODE.OR
+    assert log_op2.op_code == OP_CODE.OR
     assert log_op2.lhs is p1
     assert log_op2.rhs is p2
 
@@ -121,7 +121,7 @@ def test_build_query(store_with_data):
     query.where(pred, pred)
     assert ret_query is query
     assert isinstance(query.predicate, BooleanExpression)
-    assert query.predicate.op == OP_CODE.AND
+    assert query.predicate.op_code == OP_CODE.AND
     assert query.predicate.lhs is pred
     assert query.predicate.rhs is pred
 

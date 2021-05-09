@@ -4,8 +4,10 @@ Misc. functions.
 
 import inspect
 
-from typing import Any, Dict
+from typing import Any, Dict, Set, Text, List, Iterable, Union
 from collections.abc import Hashable
+
+from ordered_set import OrderedSet
 
 from .exceptions import NotHashable
 
@@ -69,3 +71,27 @@ def union(sequences):
             return set.union(*sequences)
     else:
         return set()
+
+
+def get_pkeys(
+    targets: Iterable[Any], pkey_name: Text, as_set=False
+) -> Union[List, OrderedSet]:
+    """
+    Extract and return "primary keys" from a sequence of objects.
+    """
+    if as_set:
+        pkeys = OrderedSet()
+        for target in targets:
+            if isinstance(target, dict):
+                pkeys.add(target[pkey_name])
+            else:
+                pkeys.add(getattr(target, pkey_name, target))
+        return pkeys
+    else:
+        pkeys = []
+        for target in targets:
+            if isinstance(target, dict):
+                pkeys.append(target[pkey_name])
+            else:
+                pkeys.append(getattr(target, pkey_name, target))
+        return pkeys

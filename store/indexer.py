@@ -13,7 +13,7 @@ from .exceptions import NotHashable
 
 class Indexer:
     """
-    Manages access to B-tree indices for each scalar field of stored states.
+    Manages access to B-tree indices for each scalar field of stored records.
     """
 
     def __init__(self, pkey: Text):
@@ -21,22 +21,22 @@ class Indexer:
         self.keys = defaultdict(set)  # map from pkey to set of indexed dict keys
         self.indices = {}             # BTree indices
 
-    def insert(self, state: Dict, keys: Iterable[Text]):
+    def insert(self, record: Dict, keys: Iterable[Text]):
         """
-        Add the primary key of the given state to the keyed indices.
+        Add the primary key of the given record to the keyed indices.
         """
         keys = set(keys) if not isinstance(keys, set) else keys
 
-        pkey = state[self.pkey_name]
+        pkey = record[self.pkey_name]
 
-        # state dict keys we're inserting in indices
+        # record dict keys we're inserting in indices
         self.keys[pkey] |= keys
 
         # insert in indices
         key = None
         try:
             for key in keys:
-                value = get_hashable(state.get(key))
+                value = get_hashable(record.get(key))
 
                 # lazy create index
                 if key not in self.indices:
@@ -50,11 +50,11 @@ class Indexer:
         except NotHashable as exc:
             raise NotHashable(exc.value, key) from exc
 
-    def remove(self, state: Dict, keys: Optional[Iterable[Text]] = None):
+    def remove(self, record: Dict, keys: Optional[Iterable[Text]] = None):
         """
-        Remove the primary key of the given state from the keyed indices.
+        Remove the primary key of the given record from the keyed indices.
         """
-        pkey = state[self.pkey_name]
+        pkey = record[self.pkey_name]
         keys = keys if isinstance(keys, set) else set(keys or [])
         keys = (keys or self.keys.get(pkey).copy())
 
@@ -71,7 +71,7 @@ class Indexer:
                     if key not in self.indices:
                         continue
                     index = self.indices[key]
-                    value = get_hashable(state[key])
+                    value = get_hashable(record[key])
                     index[value].discard(pkey)
                     if not index[value]:
                         del index[value]
@@ -85,13 +85,13 @@ class Indexer:
         if not self.keys[pkey]:
             del self.keys[pkey]
         
-    def update(self, old_state: Dict, state: Dict, keys: Iterable[Text]):
+    def update(self, old_state: Dict, record: Dict, keys: Iterable[Text]):
         """
         Update indices based on how values have changed between old and new
-        copies of an updated state.
+        copies of an updated record.
         """
         keys = keys if isinstance(keys, set) else set(keys)
-        pkey = state[self.pkey_name]
+        pkey = record[self.pkey_name]
 
         # keys for which indices need to be updated:
         stale_keys = self.keys[pkey] & keys
@@ -102,7 +102,7 @@ class Indexer:
         # update stale indices
         if stale_keys:
             self.remove(old_state, stale_keys)
-            self.insert(state, stale_keys)
+            self.insert(record, stale_keys)
 
         # insert new indices
-        self.insert(state, new_keys)
+        self.insert(record, new_keys)

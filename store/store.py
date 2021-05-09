@@ -14,15 +14,16 @@ from typing import (
 
 from appyratus.memoize import memoized_property
 
+from .interfaces import StoreInterface
 from .transaction import Transaction
 from .symbol import Symbol, SymbolicAttribute
 from .query import Query
 from .indexer import Indexer
 from .util import to_dict
-from .dirty import DirtyDict
+from .state import StateDict
 
 
-class Store:
+class Store(StoreInterface):
     """
     Store objects act as dict-based in-memory SQL-like databases.
     """
@@ -30,28 +31,46 @@ class Store:
     def __init__(
         self,
         pkey: Text = 'id',
-        dict_type: Type[DirtyDict] = DirtyDict,
+        dict_type: Type[StateDict] = StateDict,
     ):
         self.pkey_name = pkey
         self.indexer = Indexer(self.pkey_name)
         self.dict_type = dict_type
-        self.states = {}
+        self.records = {}
         self.lock = RLock()
 
-    def __contains__(self, pkey: Any) -> bool:
-        return pkey in self.states
+    def __contains__(self, target: Any) -> bool:
+        """
+        Does the store contain the given target object. The target object can be
+        a primary key value, a dict with a primary key as a dict key, or an
+        arbitrary object with a primary key as an attribute.
+        """
+        if isinstance(target, dict):
+            pkey = target[self.pkey_name]
+        else:
+            pkey = getattr(target, self.pkey_name, target)
+        return pkey in self.records
 
     def __len__(self) -> int:
-        return len(self.states)
+        """
+        Return the number of records in the store.
+        """
+        return len(self.records)
 
-    def clear(self):
+    def dict_factory(self, data: Dict) -> StateDict:
+        """
+        Create a deep copy of the given data dict, returning a new StateDict.
+        """
+        record = self.dict_type(deepcopy(data))
+        record.store = self
+        return record
+
+    def clear(self) -> None:
+        """
+        Remove all records from the store.
+        """
         self.indexer = Indexer(self.pkey_name)
-        self.states = {}
-
-    def make_state_dict(self, data: Dict) -> DirtyDict:
-        state = self.dict_type(data)
-        state.store = self
-        return state
+        self.records = {}
 
     @staticmethod
     def symbol() -> Symbol:
@@ -78,6 +97,16 @@ class Store:
         return Symbol()
 
     def transaction(self, callback: Optional[Callable] = None) -> Transaction:
+        """
+        Create a new transaction. Can be used in a with-statement, like so:
+        
+        ```python
+        with store.transaction() as trans:
+            thing = trans.create(...)
+            thing.update({'foo': 'bar', 'spam': 'eggs'})
+            other_thing = trans.get(...)
+            other_thing.delete()
+        """
         return Transaction(self, callback=callback)
 
     def select(
@@ -85,60 +114,66 @@ class Store:
         *targets: Union[SymbolicAttribute, Text],
     ) -> Query:
         """
-        Build a query over the states in the store.
+        Build a query over the records in the store.
         """
         return Query(self).select(*targets)
 
     def get(
         self,
         target: Any,
-    ) -> Optional[DirtyDict]:
+    ) -> Optional[StateDict]:
         """
-        Return a single state by primary key. If no state exists, return null.
+        Return a single record by primary key. If no record exists, return null.
         """
-        states = list(self.get_many([target]).values())
-        return states[0] if states else None
+        records = list(self.get_many([target]).values())
+        return records[0] if records else None
 
     def get_many(
         self,
-        targets: Iterable[Any],
-    ) -> OrderedDictType[Any, DirtyDict]:
+        targets: Optional[Iterable[Any]] = None,
+    ) -> OrderedDictType[Any, StateDict]:
         """
-        Return a multiple states by primary key. Records are returned in the
-        form of a dict, mapping each primary key to a possibly-null state dict.
+        Return a multiple records by primary key. Records are returned in the
+        form of a dict, mapping each primary key to a possibly-null record dict.
         Dict keys have the same order as the order with which they are provided
         in the `pkey` primary key argument.
         """
         with self.lock:
-            fetched_states = OrderedDict()
-            for target in targets:
-                if isinstance(target, dict):
-                    pkey = target[self.pkey_name]
-                else:
-                    pkey = getattr(target, self.pkey_name, target)
-                state = self.states.get(pkey)
-                if state is not None:
-                    fetched_states[pkey] = self.make_state_dict(deepcopy(state))
-            return fetched_states
+            if not targets:
+                # return all records
+                return OrderedDict([
+                    (k, self.dict_factory(v)) for k, v in self.records.items()
+                ])
+            else:
+                fetched_states = OrderedDict()
+                for target in targets:
+                    if isinstance(target, dict):
+                        pkey = target[self.pkey_name]
+                    else:
+                        pkey = getattr(target, self.pkey_name, target)
+                    record = self.records.get(pkey)
+                    if record is not None:
+                        fetched_states[pkey] = self.dict_factory(record)
+                return fetched_states
 
     def create(
         self,
         target: Any,
-    ) -> DirtyDict:
+    ) -> StateDict:
         """
-        Insert a new state in the store.
+        Insert a new record in the store.
         """
         state_map = self.create_many([target])
-        states = list(state_map.values())
-        return states[0]
+        records = list(state_map.values())
+        return records[0]
 
     def create_many(
         self,
         targets: Iterable[Any],
-    ) -> OrderedDictType[Any, DirtyDict]:
+    ) -> OrderedDictType[Any, StateDict]:
         """
-        Insert multiple states in the store, returning a mapping of created
-        primary key to created state. Dict keys are ordered by insertion.
+        Insert multiple records in the store, returning a mapping of created
+        primary key to created record. Dict keys are ordered by insertion.
         """
         created = OrderedDict()
 
@@ -146,22 +181,22 @@ class Store:
             for target in targets:
                 # try to convert instance object to dict
                 if not isinstance(target, dict):
-                    state = to_dict(target)
+                    record = to_dict(target)
                 else:
-                    state = target
+                    record = target
 
-                state = deepcopy(state)
-                pkey = state[self.pkey_name]
+                record = deepcopy(record)
+                pkey = record[self.pkey_name]
 
                 # store in global primary key map
-                self.states[pkey] = state
+                self.records[pkey] = record
 
                 # update index B-trees for each 
-                if state is not None:
-                    self.indexer.insert(state, keys=state.keys())
+                if record is not None:
+                    self.indexer.insert(record, keys=record.keys())
 
-                # add state to return created dict
-                created[pkey] = self.make_state_dict(deepcopy(state))
+                # add record to return created dict
+                created[pkey] = self.dict_factory(record)
 
         return created
 
@@ -169,35 +204,35 @@ class Store:
         self,
         target: Any,
         keys: Optional[Set] = None,
-    ) -> DirtyDict:
+    ) -> StateDict:
         """
-        Update an existing state in the store, returning the updated state.
+        Update an existing record in the store, returning the updated record.
         """
         # try to convert instance object to dict
         if not isinstance(target, dict):
-            state = to_dict(target)
+            record = to_dict(target)
         else:
-            state = target
+            record = target
 
-        pkey = state[self.pkey_name]
-        keys = set(keys or state.keys())
+        pkey = record[self.pkey_name]
+        keys = set(keys or record.keys())
 
-        existing_state = self.states[pkey]
+        existing_state = self.records[pkey]
         old_state = existing_state.copy()
 
         with self.lock:
-            existing_state.update(state)
+            existing_state.update(record, flush=False)
             self.indexer.update(old_state, existing_state, keys)
-            return self.make_state_dict(deepcopy(state))
+            return self.dict_factory(record)
 
     def update_many(
         self,
         targets: Iterable[Any],
-    ) -> OrderedDictType[Any, DirtyDict]:
+    ) -> OrderedDictType[Any, StateDict]:
         """
-        Update multiple states in the store, returning a mapping from updated
-        state primary key to corresponding state. Dict keys preserve the same
-        order of the `states` argument.
+        Update multiple records in the store, returning a mapping from updated
+        record primary key to corresponding record. Dict keys preserve the same
+        order of the `records` argument.
         """
         updated = OrderedDict()
 
@@ -205,15 +240,15 @@ class Store:
             for target in targets:
                 # try to convert instance object to dict
                 if not isinstance(target, dict):
-                    state = to_dict(target)
+                    record = to_dict(target)
                 else:
-                    state = target
+                    record = target
 
-                pkey = state[self.pkey_name]
-                existing_state = self.states.get(pkey)
+                pkey = record[self.pkey_name]
+                existing_state = self.records.get(pkey)
 
                 if existing_state is not None:
-                    updated[pkey] = self.update(state)
+                    updated[pkey] = self.update(record)
 
         return updated
 
@@ -223,25 +258,25 @@ class Store:
         keys: Optional[Iterable[Text]] = None,
     ) -> None:
         """
-        Delete an entire state from the store if no `keys` argument supplied;
-        otherwise, drop only the specified keys from the stored state.
+        Delete an entire record from the store if no `keys` argument supplied;
+        otherwise, drop only the specified keys from the stored record.
         """
         if isinstance(target, dict):
             pkey = target[self.pkey_name]
         else:
             pkey = getattr(target, self.pkey_name, target)
         with self.lock:
-            if pkey in self.states:
+            if pkey in self.records:
                 if not keys:
-                    state = self.states.pop(pkey)
-                    self.indexer.remove(state)
+                    record = self.records.pop(pkey)
+                    self.indexer.remove(record)
                 else:
-                    state = self.states[pkey]
+                    record = self.records[pkey]
                     for key in keys:
-                        if key in state:
-                            del state[key]
+                        if key in record:
+                            del record[key]
 
-                    self.indexer.remove(state, keys=keys)
+                    self.indexer.remove(record, keys=keys)
 
     def delete_many(
         self,
@@ -249,9 +284,9 @@ class Store:
         keys: Optional[Iterable[Text]] = None,
     ) -> None:
         """
-        Delete multiple entire states from the store if no `keys` argument
+        Delete multiple entire records from the store if no `keys` argument
         supplied; otherwise, drop only the specified keys from the stored
-        states.
+        records.
         """
         with self.lock:
             if not keys:
@@ -270,10 +305,10 @@ class Store:
                         pkey = target[self.pkey_name]
                     else:
                         pkey = target
-                    state = self.states.get(pkey)
-                    if state:
+                    record = self.records.get(pkey)
+                    if record:
                         for key in keys:
-                            if key in state:
-                                del state[key]
+                            if key in record:
+                                del record[key]
 
-                        self.indexer.remove(state, keys=keys)
+                        self.indexer.remove(record, keys=keys)

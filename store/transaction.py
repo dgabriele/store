@@ -1,31 +1,57 @@
-from store.dirty import DirtyDict
 from typing import (
     Optional, Text, Any, List,
     OrderedDict as OrderedDictType,
     Dict, Set, Iterable, Union,
-    Callable
+    Callable, Tuple
 )
 from copy import deepcopy
 
-from .util import to_dict
+from .util import get_pkeys, to_dict
 from .symbol import SymbolicAttribute
 from .query import Query
+from .state import StateDict
+from .interfaces import TransactionInterface
 
 
-class Transaction:
+class Transaction(TransactionInterface):
+    """
+    Transactions are created by Stores via the store.transaction() method. In
+    code, the Store through which a Transaction was created is called the "back"
+    store.
+
+    Operations performed in a transaction are applied to a separate Store
+    instance, denoted "front" in code. Upon comitting the transaction, all
+    create, update, and delete methods called on the front store are atomically
+    applied to the back store.
+    """
+
     def __init__(self, back, front=None, callback: Optional[Callable] = None):
         from store.store import Store
 
-        self.front: Store = front or Store(back.pkey_name)
         self.back: Store = back
-        self.mutations = []
+        self.front: Store = front or Store(back.pkey_name)
         self.callback = callback
+        self.journal: List[Tuple] = []
 
     def __enter__(self):
+        """
+        Enter managed context. This is used to implement:
+
+        ```python
+        with store.transaction() as trans:
+            trans.create(...)
+        ````
+
+        The context manager will either commit or rollback the transaction (See:
+        the __exit__ method)
+        """
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if exc_type:
+        """
+        Rollback or commit the transaction at the end of a "with" block.
+        """
+        if exc_type is not None:
             self.rollback()
             return False
         else:
@@ -33,102 +59,193 @@ class Transaction:
             return True
 
     def commit(self):
-        # flush mutations to the backend store,
+        """
+        Atomically replay all journaled store actions (method calls) that were
+        applied to self.front to self.back. Afterwards, apply custom "on_commit"
+        callback.
+        """
+        # flush journal to the backend store,
         # replaying front store calls to the back store.
-        for func_name, args, kwargs in self.mutations:
-            func = getattr(self.back, func_name)
-            func(*args, **kwargs)
+        with self.back.lock:
+            for func_name, args, kwargs in self.journal:
+                func = getattr(self.back, func_name)
+                func(*args, **kwargs)
 
-        # trigger custom callback method
-        if self.callback is not None:
-            self.callback(self)
+            # trigger custom callback method
+            if self.callback is not None:
+                self.callback(self)
 
     def rollback(self):
+        """
+        Clear internal record, reseting the Transaction to its initialized record.
+        """
         self.front.clear()
-        self.mutations.clear()
+        self.journal.clear()
 
-    def create(self, state: Dict) -> Dict:
-        self.mutations.append(('create', deepcopy(state), {}))
-        return self.front.create(state)
+    def create(self, record: Dict) -> Dict:
+        """
+        Insert a single record dict.
+        """
+        self.journal.append(('create', deepcopy(record), {}))
+
+        # create record solely in front store
+        return self.front.create(record)
     
-    def create_many(self, states: List[Any]) -> OrderedDictType[Any, DirtyDict]:
-        self.mutations.append(('create_many', [deepcopy(states)], {}))
-        return self.front.create_many(states)
+    def create_many(
+        self, records: Iterable[Any]
+    ) -> OrderedDictType[Any, StateDict]:
+        """
+        Insert multiple record dicts.
+        """
+        self.journal.append(('create_many', [deepcopy(records)], {}))
+
+        # create records solely in front store
+        return self.front.create_many(records)
 
     def select(self, *targets: Union[SymbolicAttribute, Text]) -> Query:
-        # TODO: add callback mechanism to Query and use it to merge front
-        # states into back
-        raise NotImplementedError()
+        """
+        Generate a query.
+        """
+        def merge(query: Query, back_result: Dict[Any, StateDict]):
+            front_query = query.copy(self.front)
+            front_result = front_query.execute()
+            if isinstance(front_result, dict):
+                back_result.update(front_result)
+                return back_result
+            else:
+                if front_result is None:
+                    if back_result is not None:
+                        self.front.create(back_result)
+                        return back_result
+                    return None
+                else:
+                    return back_result
+
+        query = self.back.select(*targets)
+        query.subscribe(merge)
+
+        return query
     
-    def get(self, pkey: Any) -> Optional[DirtyDict]:
-        if pkey not in self.front:
-            state = self.back.get(pkey)
-            if state is not None:
-                self.front.create(state)
-        else:
-            state = self.front.get(pkey)
-        state.transaction = self
-        return state
+    def get(self, target: Any) -> Optional[StateDict]:
+        """
+        Get a single record by ID.
+        """
+        pkey = get_pkeys([target], self.front.pkey_name)[0]
 
-    def get_many(self, pkeys: List[Any]) -> OrderedDictType[Any, DirtyDict]:
-        states = self.front.get_many(pkeys)
-        missing_pkey_set = set(pkeys) - states.keys()
+        # if record not present in front, load from back into font.
+        # then return the dict from front.
+        if target not in self.front:
+            record = self.back.get(pkey)
+            if record is not None:
+                self.front.create(record)
+        else:
+            record = self.front.get(pkey)
+
+        record.transaction = self
+
+        return record
+
+    def get_many(self, targets: Iterable[Any]) -> OrderedDictType[Any, StateDict]:
+        """
+        Get a multiple records by ID.
+        """
+        pkeys = get_pkeys(targets, self.front.pkey_name, as_set=True)
+
+        # get any records in the font store
+        records = self.front.get_many(pkeys)
+
+        # load any records not already in front into front from back
+        # and then add these to the returned ID map dict.
+        missing_pkey_set = pkeys - records.keys()
         if missing_pkey_set:
-            back_states = self.back.get_many(pkeys)
+            back_states = self.back.get_many(missing_pkey_set)
             self.front.create_many(back_states.values())
-            states.update(back_states)
-        return states
+            records.update(back_states)
 
-    def update(self, target: Any, keys: Optional[Set] = None) -> DirtyDict:
+        return records
+
+    def update(self, target: Any, keys: Optional[Set] = None) -> StateDict:
+        """
+        Update a single record.
+        """
         if not isinstance(target, dict):
-            state = to_dict(target)
+            record = to_dict(target)
         else:
-            state = target
-        self.mutations.append(('update', (deepcopy(state), ), {'keys': keys}))
-        pkey = state[self.front.pkey_name]
+            record = target
+
+        self.journal.append(('update', (deepcopy(record), ), {'keys': keys}))
+
+        pkey = record[self.front.pkey_name]
         if pkey not in self.front:
             back_state = self.back.get(pkey)
             self.front.create(back_state)
-            return self.front.update(state, keys=keys)
-        state = self.front.update(state)
-        state.transaction = self
-        return state
+            return self.front.update(record, keys=keys)
 
-    def update_many(self, targets: List[Dict]) -> OrderedDictType[Any, DirtyDict]:
-        states = [
+        # only update records in front store
+        record = self.front.update(record)
+        record.transaction = self
+
+        return record
+
+    def update_many(
+        self, targets: Iterable[Dict]
+    ) -> OrderedDictType[Any, StateDict]:
+        """
+        Update multiple records.
+        """
+        # normalize targets to record dicts
+        records = [
             to_dict(target) if not isinstance(target, dict) else target
             for target in targets
         ]
-        self.mutations.append(('update_many', (deepcopy(states), ), {}))
-        pkeys = {
-            state[self.front.pkey_name] for state in states
-        }
-        missing_pkey_set = pkeys - self.front.states.keys()
+
+        self.journal.append(('update_many', (deepcopy(records), ), {}))
+
+        pkeys = get_pkeys(records, self.front.pkey_name, as_set=True)
+        missing_pkey_set = pkeys - self.front.records.keys()
+
+        # get missing records from back and load into front store
         back_states = self.back.get_many(missing_pkey_set)
         self.front.create_many(back_states.values())
-        states = self.front.update_many(states)
-        for state in states.values():
-            state.transaction = self
-        return states
+
+        # perform updates to records solely in front store
+        records = self.front.update_many(records)
+        for record in records.values():
+            record.transaction = self
+
+        return records
 
     def delete(self, target: Any, keys: Optional[Iterable[Text]] = None):
+        """
+        Drop an entire record or specific keys.
+        """
+        # normalize target to record dict
         if isinstance(target, dict):
-            state = target
+            record = target
         else:
-            state = to_dict(target)
-        self.mutations.append(('delete', (deepcopy(state), ), {}))
-        self.front.delete(state, keys=keys)
+            record = to_dict(target)
+
+        self.journal.append(('delete', (deepcopy(record), ), {}))
+
+        # delete records only from font store
+        self.front.delete(record, keys=keys)
 
     def delete_many(
         self,
-        targets: List[Any],
+        targets: Iterable[Any],
         keys: Optional[Iterable[Text]] = None
     ) -> None:
-        states = [
+        """
+        Delete multiple records from the store (or, if keys present, just remove
+        the given keys from the target records).
+        """
+        # normalize targest to record dicts
+        records = [
             to_dict(target) if not isinstance(target, dict) else target
             for target in targets
         ]
-        self.mutations.append(
-            ('delete_many', (deepcopy(states), ), {'keys': keys})
+        self.journal.append(
+            ('delete_many', (deepcopy(records), ), {'keys': keys})
         )
-        self.front.delete_many(states)
+        # delete solely from front store
+        self.front.delete_many(records)

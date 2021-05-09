@@ -1,5 +1,5 @@
 def test_update(store_with_data, press_event):
-    # ensure that the returned state after applying an update to a value
+    # ensure that the returned record after applying an update to a value
     # indeed contains the updated value.
     old_char = press_event['char']
     new_char = 'X'
@@ -15,7 +15,7 @@ def test_update(store_with_data, press_event):
 
 
 def test_update_for_non_scalar(store_with_data, click_event):
-    # ensure that the returned state after applying an update to a value
+    # ensure that the returned record after applying an update to a value
     # indeed contains the updated value.
     old_value = click_event['position']
 

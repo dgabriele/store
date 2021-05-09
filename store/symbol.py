@@ -3,23 +3,14 @@ from typing import Any, Optional, Text, Iterable
 from .util import get_hashable
 from .constants import OP_CODE
 from .predicate import ConditionalExpression
-from .ordering import Ordering
+from .interfaces import OrderingInterface, SymbolicAttributeInterface
 
 
-class Symbol:
-    def __init__(self):
-        self.attrs = {}
-
-    def __getattr__(self, key: Text) -> 'SymbolicAttribute':
-        if key not in self.attrs:
-            attr = SymbolicAttribute(key, symbol=self)
-            self.attrs[key] = attr
-        return self.attrs[key]
-
-
-
-class SymbolicAttribute:
+class SymbolicAttribute(SymbolicAttributeInterface):
     def __init__(self, key: Text, symbol: Optional['Symbol'] = None) -> None:
+        from store.ordering import Ordering
+
+        self.ordering_class = Ordering
         self.symbol = symbol
         self.key = key
 
@@ -45,9 +36,22 @@ class SymbolicAttribute:
         return ConditionalExpression(OP_CODE.IN, self, get_hashable(value))
 
     @property
-    def asc(self) -> Ordering:
-        return Ordering(self, desc=False)
+    def asc(self) -> OrderingInterface:
+        return self.ordering_class(self, desc=False)
 
     @property
-    def desc(self) -> Ordering:
-        return Ordering(self, desc=True)
+    def desc(self) -> OrderingInterface:
+        return self.ordering_class(self, desc=True)
+
+
+class Symbol:
+    Attribute = SymbolicAttribute
+
+    def __init__(self):
+        self.attrs = {}
+
+    def __getattr__(self, key: Text) -> 'SymbolicAttribute':
+        if key not in self.attrs:
+            attr = SymbolicAttribute(key, symbol=self)
+            self.attrs[key] = attr
+        return self.attrs[key]

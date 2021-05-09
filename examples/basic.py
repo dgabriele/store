@@ -40,5 +40,5 @@ query = store.select(
 )
 
 ladies = query.execute()
-for state in ladies.values():
-    print(f'{state["name"]} is located at {state["location"]}.')
+for record in ladies.values():
+    print(f'{record["name"]} is located at {record["location"]}.')
