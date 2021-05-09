@@ -54,13 +54,14 @@ class StateDict(StateDictInterface):
         copy.transaction = self.transaction
         return copy
 
-    def update(self, values: Dict, flush=True) -> 'StateDict':
+    def update(self, values: Dict, sync=True) -> 'StateDict':
         """
         Update values in the dict itself while syncing these changes to the
         associated store at the same time.
         """
         super().update(values)
-        if flush:
+        if sync:
+            # sync to store or transaction
             self.backend.update(self, set(values.keys()))
         return self
 

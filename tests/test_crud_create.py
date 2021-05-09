@@ -64,3 +64,10 @@ def test_basic_crud_with_instance_object(store, Person):
     assert updated_state['age'] != old_age
     for k, v in updated_state.items():
         assert getattr(person, k) == v
+
+
+def test_id_is_autocreated(store):
+    # ensure an ID is created by the store if not passed in raw dict argument.
+    record = store.create({'foo': 'bar'})
+    assert 'id' in record
+    assert record['id'] is not None

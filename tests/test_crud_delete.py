@@ -1,17 +1,20 @@
 from store.util import get_hashable
 
 
-def test_delete(store_with_data, press_event, click_event):
-    store_with_data.delete(press_event)
+def test_delete(store, press_event, click_event):
+    store.create_many([press_event, click_event])
+    assert len(store.records) == 2
 
-    assert len(store_with_data.records) == 1
-    assert click_event['id'] in store_with_data.records
+    store.delete(press_event)
 
-    store_with_data.delete(click_event)
+    assert len(store.records) == 1
+    assert click_event['id'] in store.records
 
-    assert not store_with_data.records
+    store.delete(click_event)
 
-    indexer = store_with_data.indexer
+    assert not store.records
+
+    indexer = store.indexer
     for k, index in indexer.indices.items():
         for record in [press_event, click_event]:
             if k in record:

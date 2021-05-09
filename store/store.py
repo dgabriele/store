@@ -2,7 +2,8 @@
 class Store
 """
 
-from collections import OrderedDict
+from uuid import uuid4
+from collections import OrderedDict, defaultdict
 from threading import RLock
 from copy import deepcopy
 from typing import (
@@ -11,6 +12,7 @@ from typing import (
     Iterable, Text, Union, Callable,
     Type
 )
+from weakref import WeakValueDictionary
 
 from appyratus.memoize import memoized_property
 
@@ -33,10 +35,12 @@ class Store(StoreInterface):
         pkey: Text = 'id',
         dict_type: Type[StateDict] = StateDict,
     ):
+        super().__init__()
         self.pkey_name = pkey
         self.indexer = Indexer(self.pkey_name)
         self.dict_type = dict_type
-        self.records = {}
+        self.records: Dict[Text, Dict] = {}
+        self.identity = WeakValueDictionary()
         self.lock = RLock()
 
     def __contains__(self, target: Any) -> bool:
@@ -57,7 +61,17 @@ class Store(StoreInterface):
         """
         return len(self.records)
 
-    def dict_factory(self, data: Dict) -> StateDict:
+    def pkey_factory(self, record: Dict) -> Any:
+        """
+        Return an ID for a record being created.
+        """
+        pkey = record.get(self.pkey_name)
+        if pkey is not None:
+            return pkey
+        else:
+            return uuid4().hex
+
+    def state_dict_factory(self, data: Dict) -> StateDict:
         """
         Create a deep copy of the given data dict, returning a new StateDict.
         """
@@ -70,7 +84,7 @@ class Store(StoreInterface):
         Remove all records from the store.
         """
         self.indexer = Indexer(self.pkey_name)
-        self.records = {}
+        self.records.clear()
 
     @staticmethod
     def symbol() -> Symbol:
@@ -110,19 +124,13 @@ class Store(StoreInterface):
         front = type(self)(self.pkey_name, dict_type=self.dict_type)
         return Transaction(self, front, callback=callback)
 
-    def select(
-        self,
-        *targets: Union[SymbolicAttribute, Text],
-    ) -> Query:
+    def select(self, *targets: Union[SymbolicAttribute, Text]) -> Query:
         """
         Build a query over the records in the store.
         """
         return Query(self).select(*targets)
 
-    def get(
-        self,
-        target: Any,
-    ) -> Optional[StateDict]:
+    def get(self, target: Any) -> Optional[StateDictInterface]:
         """
         Return a single record by primary key. If no record exists, return null.
         """
@@ -132,7 +140,7 @@ class Store(StoreInterface):
     def get_many(
         self,
         targets: Optional[Iterable[Any]] = None,
-    ) -> OrderedDictType[Any, StateDict]:
+    ) -> OrderedDictType[Any, StateDictInterface]:
         """
         Return a multiple records by primary key. Records are returned in the
         form of a dict, mapping each primary key to a possibly-null record dict.
@@ -142,9 +150,12 @@ class Store(StoreInterface):
         with self.lock:
             if not targets:
                 # return all records
-                return OrderedDict([
-                    (k, self.dict_factory(v)) for k, v in self.records.items()
-                ])
+                state_dicts = OrderedDict()
+                for pkey in self.records.keys() - self.identity.keys():
+                    record = self.records[pkey]
+                    state_dict = self.state_dict_factory(record)
+                    state_dicts[pkey] = state_dict
+                return state_dicts
             else:
                 fetched_states = OrderedDict()
                 for target in targets:
@@ -154,13 +165,18 @@ class Store(StoreInterface):
                         pkey = getattr(target, self.pkey_name, target)
                     record = self.records.get(pkey)
                     if record is not None:
-                        fetched_states[pkey] = self.dict_factory(record)
+                        state_dict = self.identity.get(pkey)
+                        if state_dict is not None:
+                            state_dict.update(record, sync=False)
+                        else:
+                            state_dict = self.state_dict_factory(record)
+                            self.identity[pkey] = state_dict
+
+                        fetched_states[pkey] = state_dict
+
                 return fetched_states
 
-    def create(
-        self,
-        target: Any,
-    ) -> StateDict:
+    def create(self, target: Any) -> StateDictInterface:
         """
         Insert a new record in the store.
         """
@@ -189,18 +205,21 @@ class Store(StoreInterface):
                     else:
                         record = target
 
+                record[self.pkey_name] = self.pkey_factory(record)
                 record = deepcopy(record)
                 pkey = record[self.pkey_name]
 
                 # store in global primary key map
                 self.records[pkey] = record
+                state_dict = self.state_dict_factory(record)
+                self.identity[pkey] = state_dict
 
                 # update index B-trees for each 
                 if record is not None:
                     self.indexer.insert(record, keys=record.keys())
 
                 # add record to return created dict
-                created[pkey] = self.dict_factory(record)
+                created[pkey] = state_dict
 
         return created
 
@@ -208,7 +227,7 @@ class Store(StoreInterface):
         self,
         target: Any,
         keys: Optional[Set] = None,
-    ) -> StateDict:
+    ) -> StateDictInterface:
         """
         Update an existing record in the store, returning the updated record.
         """
@@ -221,13 +240,27 @@ class Store(StoreInterface):
         pkey = record[self.pkey_name]
         keys = set(keys or record.keys())
 
-        existing_state = self.records[pkey]
-        old_state = existing_state.copy()
+        existing_record = self.records[pkey]
+        old_state = existing_record.copy()
 
         with self.lock:
-            existing_state.update(record, flush=False)
-            self.indexer.update(old_state, existing_state, keys)
-            return self.dict_factory(record)
+            if not keys:
+                existing_record.update(record)
+            else:
+                existing_record.update({
+                    k: v for k, v in record.items() if k in record
+                })
+
+            self.indexer.update(old_state, existing_record, keys)
+
+            state_dict = self.identity.get(pkey)
+            if state_dict:
+                state_dict.update(record, sync=False)
+            else:
+                state_dict = self.state_dict_factory(existing_record)
+                self.identity[pkey] = state_dict
+
+            return state_dict
 
     def update_many(
         self,

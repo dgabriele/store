@@ -1,6 +1,6 @@
-def test_create_in_transaction(store, click_event, transaction):
+def test_create_in_transaction(click_event, transaction):
     trans = transaction
-    record = trans.create(click_event)
+    trans.create(click_event)
     pkey = click_event['id']
 
     assert pkey in trans.front.records
@@ -9,9 +9,9 @@ def test_create_in_transaction(store, click_event, transaction):
     assert trans.journal[0][0] == 'create'
 
 
-def test_create_many_in_transaction(store, click_event, press_event, transaction):
+def test_create_many_in_transaction(click_event, press_event, transaction):
     trans = transaction
-    record = trans.create_many([click_event, press_event])
+    trans.create_many([click_event, press_event])
 
     for event in [click_event, press_event]:
         pkey = click_event['id']
@@ -22,7 +22,7 @@ def test_create_many_in_transaction(store, click_event, press_event, transaction
     assert trans.journal[0][0] == 'create_many'
 
 
-def test_get_in_transaction(store, click_event, transaction):
+def test_get_in_transaction(click_event, transaction):
     trans = transaction
     trans.create(click_event)
     assert len(trans.journal) == 1
@@ -32,7 +32,7 @@ def test_get_in_transaction(store, click_event, transaction):
     assert len(trans.journal) == 1
 
 
-def test_get_many_in_transaction(store, click_event, press_event, transaction):
+def test_get_many_in_transaction(click_event, press_event, transaction):
     trans = transaction
     trans.create_many([click_event, press_event])
     assert len(trans.journal) == 1
@@ -41,6 +41,20 @@ def test_get_many_in_transaction(store, click_event, press_event, transaction):
     assert len(records) == 2
     assert len(trans.journal) == 1
 
+
+def test_select_in_transaction(store):
+    sam = store.create({'name': 'Sam'})
+    with store.transaction() as trans:
+        sam = trans.get(sam['id'])
+        sam.update({'name': 'Bob', 'age': 124})
+
+        sam = store.get(sam['id'])
+        assert sam['name'] == 'Sam'
+        assert 'age' not in sam
+
+    sam = store.get(sam['id'])
+    assert sam['name'] == 'Bob'
+    assert 'age' in sam
 
 def test_update_in_transaction(store_with_data, click_event, transaction):
     old_x = click_event['position']['x']
