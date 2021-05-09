@@ -14,7 +14,7 @@ def test_create_many_in_transaction(click_event, press_event, transaction):
     trans.create_many([click_event, press_event])
 
     for event in [click_event, press_event]:
-        pkey = click_event['id']
+        pkey = event['id']
         assert pkey in trans.front.records
         assert pkey not in trans.back.records
 
@@ -55,6 +55,7 @@ def test_select_in_transaction(store):
     sam = store.get(sam['id'])
     assert sam['name'] == 'Bob'
     assert 'age' in sam
+
 
 def test_update_in_transaction(store_with_data, click_event, transaction):
     old_x = click_event['position']['x']
