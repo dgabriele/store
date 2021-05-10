@@ -4,9 +4,9 @@ Query main class.
 
 from copy import deepcopy
 from functools import reduce
-from typing import Callable, List, Optional, OrderedDict, Set, Text, Union, Dict
+from typing import Callable, Iterable, List, Optional, OrderedDict, Set, Text, Union, Dict
 
-from .interfaces import StoreInterface, QueryInterface
+from .interfaces import StateDictInterface, StoreInterface, QueryInterface
 from .exceptions import NotSelectable
 from .predicate import Predicate
 from .symbol import SymbolicAttribute
@@ -54,12 +54,12 @@ class Query(QueryInterface):
         """
         return self.execute(*args, **kwargs)
 
-    def execute(self, first=False) -> Optional[Union[StateDict, OrderedDict]]:
+    def execute(self, first=False) -> Optional[Union[StateDictInterface, OrderedDict]]:
         """
         Execute the query, returning either a single StateDict or an ID map of
         multiple.
         """
-        def project(record, selected, pkey_name):
+        def project(record, selected, pkey_name) -> StateDictInterface:
             """Return a projection of the given record dict"""
             if selected:
                 keys = set(selected.keys()) | {pkey_name}
@@ -144,14 +144,22 @@ class Query(QueryInterface):
         """
         self.callbacks.discard(callback)
 
+    def delete(
+        self, keys: Optional[Iterable[Text]] = None
+    ) -> Dict[Text, StateDictInterface]:
+        records = self.execute()
+        assert records is not None
+        self.store.delete_many(records.values(), keys=keys)
+        return records
+
     def copy(self, store: Optional[StoreInterface] = None) -> 'Query':
         """
         Create a copy of this Query, optionally with a different store instance
         than this query's self.store.
         """
         query = Query(store=store or self.store)
-        query.selected = deepcopy(self.selected)
-        query.predicate = deepcopy(self.predicate)
+        query.selected = {k: v.copy() for k, v in self.selected.items()}
+        query.predicate = self.predicate.copy()
         query.orderings = deepcopy(self.orderings)
         query.limit_index = self.limit_index
         query.offset_index = self.offset_index

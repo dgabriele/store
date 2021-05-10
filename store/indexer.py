@@ -46,7 +46,9 @@ class Indexer:
                 index = self.indices[key]
                 if value not in index:
                     index[value] = set()
-                    index[value].add(pkey)
+
+                index[value].add(pkey)
+
         except NotHashable as exc:
             raise NotHashable(exc.value, key) from exc
 
@@ -70,13 +72,21 @@ class Indexer:
                     # lazy create index
                     if key not in self.indices:
                         continue
+
                     index = self.indices[key]
                     value = get_hashable(record[key])
-                    index[value].discard(pkey)
+
+                    pkey_set = index.get(value)
+                    if not pkey_set:
+                        continue
+
+                    pkey_set.discard(pkey)
+
                     if not index[value]:
                         del index[value]
                     if not index:
                         del self.indices[key]
+
             except NotHashable as exc:
                 raise NotHashable(exc.value, key) from exc
 

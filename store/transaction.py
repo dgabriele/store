@@ -6,8 +6,10 @@ from typing import (
 )
 from copy import deepcopy
 
+from appyratus.memoize import memoized_property
+
 from .util import get_pkeys, to_dict
-from .symbol import SymbolicAttribute
+from .symbol import Symbol
 from .query import Query
 from .interfaces import (
     QueryInterface, StoreInterface, TransactionInterface, StateDictInterface
@@ -32,6 +34,7 @@ class Transaction(TransactionInterface):
         self.front: StoreInterface = front
         self.callback = callback
         self.journal: List[Tuple] = []
+        self.deleted_pkeys = set()
 
     def __enter__(self):
         """
@@ -58,6 +61,22 @@ class Transaction(TransactionInterface):
             self.commit()
             return True
 
+    @memoized_property
+    def entry(self) -> Symbol:
+        """
+        For convenience, this can be used when forming queries, like:
+
+        query = store.select(
+            store.entry.id,
+            store.entry.email,
+            store.entry.password,
+        ).where(
+            store.entry.name == 'John'
+        )
+
+        """
+        return Symbol()
+
     def commit(self):
         """
         Atomically replay all journaled store actions (method calls) that were
@@ -71,6 +90,9 @@ class Transaction(TransactionInterface):
                 func = getattr(self.back, func_name)
                 func(*args, **kwargs)
 
+            if self.deleted_pkeys:
+                self.back.delete_many(self.deleted_pkeys)
+
             # trigger custom callback method
             if self.callback is not None:
                 self.callback(self)
@@ -81,6 +103,7 @@ class Transaction(TransactionInterface):
         """
         self.front.clear()
         self.journal.clear()
+        self.deleted_pkeys.clear()
 
     def create(self, record: Dict) -> Dict:
         """
@@ -102,7 +125,7 @@ class Transaction(TransactionInterface):
         # create records solely in front store
         return self.front.create_many(records)
 
-    def select(self, *targets: Union[SymbolicAttribute, Text]) -> QueryInterface:
+    def select(self, *targets: Union[Symbol.Attribute, Text]) -> QueryInterface:
         """
         Generate a query.
         """
@@ -132,6 +155,9 @@ class Transaction(TransactionInterface):
         """
         pkey = get_pkeys([target], self.front.pkey_name)[0]
 
+        if pkey in self.deleted_pkeys:
+            return None
+
         # if record not present in front, load from back into font.
         # then return the dict from front.
         if target not in self.front:
@@ -153,6 +179,7 @@ class Transaction(TransactionInterface):
         Get a multiple records by ID.
         """
         pkeys = get_pkeys(targets, self.front.pkey_name, as_set=True)
+        pkeys -= self.deleted_pkeys
 
         # get any records in the font store
         records = self.front.get_many(pkeys)
@@ -230,10 +257,15 @@ class Transaction(TransactionInterface):
         else:
             record = to_dict(target)
 
-        self.journal.append(('delete', (deepcopy(record), ), {}))
+        pkey = get_pkeys([record], self.front.pkey_name)[0]
+
+        if not keys:
+            self.deleted_pkeys.add(pkey)
+
+        self.journal.append(('delete', (pkey, ), {}))
 
         # delete records only from font store
-        self.front.delete(record, keys=keys)
+        self.front.delete(pkey, keys=keys)
 
     def delete_many(
         self,
@@ -244,13 +276,13 @@ class Transaction(TransactionInterface):
         Delete multiple records from the store (or, if keys present, just remove
         the given keys from the target records).
         """
-        # normalize targest to record dicts
-        records = [
-            to_dict(target) if not isinstance(target, dict) else target
-            for target in targets
-        ]
+        pkeys = get_pkeys(targets, self.front.pkey_name)
+
+        if not keys:
+            self.deleted_pkeys.update(pkeys)
+
         self.journal.append(
-            ('delete_many', (deepcopy(records), ), {'keys': keys})
+            ('delete_many', (pkeys, ), {'keys': keys})
         )
         # delete solely from front store
-        self.front.delete_many(records)
+        self.front.delete_many(pkeys)

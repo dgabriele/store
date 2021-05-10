@@ -59,7 +59,13 @@ class Predicate:
             # and union them into the accumulating computed_ids set.
             key = predicate.attr.key
             val = predicate.value
-            index = indexer.indices[key]
+            index = indexer.indices.get(key)
+
+            # if the index doesn't exist yet, just skip it,
+            # as this implies no data with the given key is
+            # contained in the store.
+            if not index:
+                return set()
 
             if op_code == OP_CODE.EQ:
                 computed_ids = index.get(val, empty)
@@ -129,6 +135,9 @@ class Predicate:
 
         return computed_ids
 
+    def copy(self) -> 'Predicate':
+        raise NotImplementedError()
+
 
 class ConditionalExpression(Predicate):
     """
@@ -145,6 +154,8 @@ class ConditionalExpression(Predicate):
         self.key = attr.key
         self.value = value
 
+    def copy(self) -> 'ConditionalExpression':
+        return type(self)(self.op_code, self.attr, self.value)
 
 class BooleanExpression(Predicate):
     """
@@ -158,3 +169,6 @@ class BooleanExpression(Predicate):
         super().__init__(op_code)
         self.lhs = lhs
         self.rhs = rhs
+
+    def copy(self) -> 'BooleanExpression':
+        return type(self)(self.op_code, self.lhs.copy(), self.rhs.copy())

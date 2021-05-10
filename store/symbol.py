@@ -27,6 +27,9 @@ class SymbolicAttribute(SymbolicAttributeInterface):
         self.symbol = symbol
         self.key = key
 
+    def copy(self) -> 'SymbolicAttribute':
+        return type(self)(self.key, self.symbol)
+
     def __lt__(self, value: Any) -> ConditionalExpression:
         return ConditionalExpression(OP_CODE.LT, self, get_hashable(value))
 
