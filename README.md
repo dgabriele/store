@@ -1,9 +1,9 @@
 # Store
 This library provides a `Store` datatype for Python. Each store looks and feels
-like an ORM object yet has no database on the back end. Instead, all data lives
-in memory, in the form of plain Python dicts and B-tree indices. Stores support
-**SQL-like _select_ statements** in the style of SQLAlchemy, **atomic
-transactions** and **multithreading**.
+like an ORM, but unlike an ORM, there is no database on the other end. Instead,
+all data lives in memory, in the form of plain Python dicts and B-tree indices.
+Stores support **SQL-like _select_ statements** in the style of SQLAlchemy,
+**atomic transactions** and **multithreading**.
 
 The source code aims to be rebustly documented, as we encourage open-source
 collaboration on this Project.
@@ -49,3 +49,4 @@ with store.transaction() as trans:
     for event in events.values():
         event['char'] = event['char'].upper()
 ```
+
