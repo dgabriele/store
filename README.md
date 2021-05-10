@@ -1,23 +1,24 @@
 # Store
-_Stores_ look and feel like an ORM, but unlike an ORM, there is no
-database on the other side. Instead, all data is resides in memory, in the form of plain
-Python dicts and B-tree indices. Moreover, Stores support **SQL-like _select_** statements
-in the style of _SQLAlchemy_, **transactions**, **multithreading**, and the
-source code is rebustly documented.
+This library provides a `Store` datatype for Python. Each store looks and feels
+like an ORM object yet has no database on the back end. Instead, all data lives
+in memory, in the form of plain Python dicts and B-tree indices. Stores support
+**SQL-like _select_ statements** in the style of SQLAlchemy, **atomic
+transactions** and **multithreading**.
 
-We greatly encourage open-source collaboration on this Project, so please do
-have a look! Thanks and enjoy!
+The source code aims to be rebustly documented, as we encourage open-source
+collaboration on this Project.
 
-## Possible Use-cases
+## Use-cases
 - Long-running interactive applications, like games.
-- Automated trading systems with complicated decision-making logic.
-- Stream-processing applications that perform _ad hoc_ queries on a stream.
+- Automated trading systems with complex internal state management requirements.
+- Stream-processing applications that perform fast _ad hoc_ queries on stream buffers.
 
 ## Basic Example
 Imagine a system that generates user input events, like _mouse click_ and _key
-press_. In this example, we delete _click events_ created after specified
-timestamp (just an int, in this case) while capitalizing the pressed
-character asssociated with each _key press_ event.
+press_. In this example, we begin a transaction and delete _click events_
+created after a specified time and capitalize the pressed character asssociated
+with each _key press_ event. These operations are random; however, they
+demonstate the basic API.
 
 ```python
 from store import Store
