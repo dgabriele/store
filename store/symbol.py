@@ -2,12 +2,12 @@
 class Symbol
 """
 
-from typing import Any, Optional, Text, Iterable, Type, Dict
+from typing import Any, Optional, Text, Iterable, Type, Dict, Union
 
 from .util import get_hashable
 from .constants import OP_CODE
 from .predicate import ConditionalExpression
-from .interfaces import OrderingInterface, SymbolicAttributeInterface
+from .interfaces import OrderingInterface, QueryInterface, StateDictInterface, StoreInterface, SymbolicAttributeInterface
 
 
 class SymbolicAttribute(SymbolicAttributeInterface):
@@ -100,8 +100,9 @@ class Symbol:
 
     Attribute = SymbolicAttribute
 
-    def __init__(self):
-        self.attrs: Dict[Text, 'SymbolicAttribute'] = {}
+    def __init__(self, store: StoreInterface):
+        self._store = store
+        self._attrs: Dict[Text, 'SymbolicAttribute'] = {}
 
     def __getattr__(self, key: Text) -> 'SymbolicAttribute':
         """
@@ -116,9 +117,9 @@ class Symbol:
 
         The SymbolicAttribute is memoized in self.attrs.
         """
-        if key not in self.attrs:
+        if key not in self._attrs:
             # create and memoize SymbolicAttribute
             attr = SymbolicAttribute(key, symbol=self)
-            self.attrs[key] = attr
+            self._attrs[key] = attr
 
-        return self.attrs[key]
+        return self._attrs[key]

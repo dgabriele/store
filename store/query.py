@@ -22,14 +22,14 @@ class Query(QueryInterface):
 
     ```python
     query = store.select(
-        store.entry.type,
-        store.entry.species,
-        store.entry.common_name,
+        store.row.type,
+        store.row.species,
+        store.row.common_name,
     ).where(
-        store.entry.type == 'fruit',
-        store.entry.discovery_date > (now - timedelta(years=50)
+        store.row.type == 'fruit',
+        store.row.discovery_date > (now - timedelta(years=50)
     ).order_by(
-        store.entry.discovery_date.asc
+        store.row.discovery_date.asc
     ).limit(
         10
     )

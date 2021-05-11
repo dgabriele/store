@@ -169,7 +169,7 @@ class TransactionInterface:
 class StoreInterface:
 
     pkey_name: Text
-    entry: SymbolicAttributeInterface
+    row: SymbolicAttributeInterface
     records: Dict[Text, Dict]
     lock: RLock
     

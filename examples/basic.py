@@ -31,12 +31,12 @@ store.create_many([
 ])
 
 query = store.select(
-    store.entry.name,
-    store.entry.location
+    store.row.name,
+    store.row.location
 ).where(
-    store.entry.weight < 130
+    store.row.weight < 130
 ).order_by(
-    store.entry.name.desc
+    store.row.name.desc
 )
 
 ladies = query.execute()

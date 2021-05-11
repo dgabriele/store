@@ -62,16 +62,16 @@ class Transaction(TransactionInterface):
             return True
 
     @memoized_property
-    def entry(self) -> Symbol:
+    def row(self) -> Symbol:
         """
         For convenience, this can be used when forming queries, like:
 
         query = store.select(
-            store.entry.id,
-            store.entry.email,
-            store.entry.password,
+            store.row.id,
+            store.row.email,
+            store.row.password,
         ).where(
-            store.entry.name == 'John'
+            store.row.name == 'John'
         )
 
         """

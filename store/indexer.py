@@ -60,7 +60,7 @@ class Indexer:
         keys = keys if isinstance(keys, set) else set(keys or [])
         keys = (keys or self.keys.get(pkey).copy())
 
-        # remove keys from key map set and delete entry
+        # remove keys from key map set and delete row
         # from keys map if no more keys
         if keys:
             self.keys[pkey] -= keys
@@ -91,7 +91,7 @@ class Indexer:
                 raise NotHashable(exc.value, key) from exc
 
         # if all keys removed from all indices,
-        # remove entry in keys dict
+        # remove row in keys dict
         if not self.keys[pkey]:
             del self.keys[pkey]
         
