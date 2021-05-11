@@ -4,14 +4,19 @@ Query main class.
 
 from copy import deepcopy
 from functools import reduce
-from typing import Callable, Iterable, List, Optional, OrderedDict, Set, Text, Union, Dict
+from collections import OrderedDict
+from typing import (
+    Any, Callable, Iterable, List, Optional,
+    Set, Text, Type, Union, Dict
+)
+
+from pandas import DataFrame
 
 from .interfaces import StateDictInterface, StoreInterface, QueryInterface
 from .exceptions import NotSelectable
 from .predicate import Predicate
 from .symbol import SymbolicAttribute
 from .ordering import Ordering
-from .state import StateDict
 
 
 class Query(QueryInterface):
@@ -48,13 +53,15 @@ class Query(QueryInterface):
         self.offset_index: Optional[int] = None
         self.callbacks: Set[Callable] = set()
 
-    def __call__(self, *args, **kwargs) -> Optional[Dict]:
+    def __call__(self, *args, **kwargs) -> Any:
         """
         Execute the query. This is a passthru for self.execute.
         """
         return self.execute(*args, **kwargs)
 
-    def execute(self, first=False) -> Optional[Union[StateDictInterface, OrderedDict]]:
+    def execute(
+        self, first=False, dtype: Type = OrderedDict
+    ) -> Optional[Union[StateDictInterface, Dict, Iterable]]:
         """
         Execute the query, returning either a single StateDict or an ID map of
         multiple.
@@ -103,20 +110,40 @@ class Query(QueryInterface):
             records = records[:self.limit_index]
 
         pkey_name = self.store.pkey_name
+        retval = None
 
+        # compute the return value based on dtype
         if first:
             # only return the first record dict
             record = project(records[0], self.selected, pkey_name)
             execute_callbacks(self, record)
-            return record
-        else:
-            # build ID => StateDict map
-            state_map = OrderedDict()
+            retval = record
+        elif issubclass(dtype, dict):
+            retval = dtype() # ID => StateDict
             for record in records:
                 pkey = record[self.store.pkey_name]
-                state_map[pkey] = project(record, self.selected, pkey_name)
-            execute_callbacks(self, state_map)
-            return state_map
+                retval[pkey] = project(record, self.selected, pkey_name)
+        elif issubclass(dtype, (tuple, set)):
+            retval = dtype(
+                project(record, self.selected, pkey_name)
+                for record in records
+            )
+        elif issubclass(dtype, list):
+            retval = [
+                project(record, self.selected, pkey_name)
+                for record in records
+            ]
+        elif issubclass(dtype, DataFrame):
+            retval = DataFrame(
+                project(record, self.selected, pkey_name)
+                for record in records
+            )
+            retval.index = retval[self.store.pkey_name]
+
+        # pass return value into execution callbaks
+        execute_callbacks(self, retval)
+
+        return retval
 
     def clear(self) -> None:
         """
@@ -147,8 +174,12 @@ class Query(QueryInterface):
     def delete(
         self, keys: Optional[Iterable[Text]] = None
     ) -> Dict[Text, StateDictInterface]:
+        """
+        Execute the query and delete the results. Return the results after.
+        """
         records = self.execute()
-        assert records is not None
+        assert isinstance(records, dict)
+
         self.store.delete_many(records.values(), keys=keys)
         return records
 

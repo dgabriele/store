@@ -100,8 +100,7 @@ class Symbol:
 
     Attribute = SymbolicAttribute
 
-    def __init__(self, store: StoreInterface):
-        self._store = store
+    def __init__(self):
         self._attrs: Dict[Text, 'SymbolicAttribute'] = {}
 
     def __getattr__(self, key: Text) -> 'SymbolicAttribute':
@@ -115,7 +114,7 @@ class Symbol:
         assert attr.key == 'email'
         ```
 
-        The SymbolicAttribute is memoized in self.attrs.
+        The SymbolicAttribute is memoized in self._attrs.
         """
         if key not in self._attrs:
             # create and memoize SymbolicAttribute

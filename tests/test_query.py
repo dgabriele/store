@@ -9,8 +9,8 @@ def test_symbol_adds_attributes():
     user = Symbol()
     user.name
 
-    assert 'name' in user.attrs
-    assert isinstance(user.attrs['name'], SymbolicAttribute)
+    assert 'name' in user._attrs
+    assert isinstance(user._attrs['name'], SymbolicAttribute)
     assert user.name.symbol is user
 
 

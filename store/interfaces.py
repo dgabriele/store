@@ -5,7 +5,7 @@ Public Interface classes for internal components
 from threading import RLock
 from typing import (
     Any, Dict, Optional, Set, OrderedDict,
-    Iterable, Text, Union, Callable,
+    Iterable, Text, Type, Union, Callable,
 )
 
 from .predicate import ConditionalExpression
@@ -83,7 +83,9 @@ class QueryInterface:
     def unsubscribe(self, callback: Callable) -> None:
         raise NotImplementedError()
 
-    def execute(self, first=False) -> Optional[Union[StateDictInterface, Dict]]:
+    def execute(
+        self, first=False, dtype: Type = dict,
+    ) -> Optional[Union[StateDictInterface, Dict]]:
         raise NotImplementedError()
 
     def clear(self):

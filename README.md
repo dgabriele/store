@@ -13,12 +13,11 @@ collaboration on this Project.
 - Automated trading systems with complex internal state management requirements.
 - Stream-processing applications that perform fast _ad hoc_ queries on stream buffers.
 
-## Basic Example
+## Overview by Example
 Imagine a system that generates user input events, like _mouse click_ and _key
-press_. In this example, we begin a transaction and delete _click events_
-created after a specified time and capitalize the pressed character asssociated
-with each _key press_ event. These operations are random; however, they
-demonstate the basic API.
+press_. In the following example, we delete _click events_ created after a
+specified time and capitalize the character asssociated with each _key press_
+within a transaction.
 
 ```python
 from store import Store
@@ -57,8 +56,8 @@ _limit_ and _offset_ constraints.
 ### Symbols
 Select statements are written with the help of a class called `Symbol`. A symbol
 is a variable used to express what you want to select and how. Suppose you had a
-store of "user" records. In this case, you could write query to selects all
-users created after a certain cut-off date using a symbol:
+store of _user_ records. Then, using a symbol, You could write a query to
+selects all users, created after a certain cut-off date.
 
 ```python
 user = user_store.symbol()
@@ -74,8 +73,8 @@ for user in get_users(dtype=list):
     send(message=f'Hello, {user["first_name"]}!', email=user['email'])
 ```
 
-An alternative to instantiating new symbols for each query is to use a built-in
-store attribute, `store.row`. The following query is identical to the one above:
+An alternative to instantiating a new symbol for each query is to use a built-in
+property, `store.row`. The following query is identical to the one above:
 
 ```python
 get_users = user_store.select(
@@ -182,3 +181,9 @@ query = store.select(
     10
 )
 ```
+
+## Transactions
+Todo
+
+## Implementation Details
+Todo
