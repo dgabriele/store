@@ -13,7 +13,7 @@ collaboration on this Project.
 - Automated trading systems with complex internal state management requirements.
 - Stream-processing applications that perform fast _ad hoc_ queries on stream buffers.
 
-## Overview by Example
+## An Example
 Imagine a system that generates user input events, like _mouse click_ and _key
 press_. In the following example, we delete _click events_ created after a
 specified time and capitalize the character asssociated with each _key press_
@@ -48,6 +48,49 @@ with events.transaction() as transaction:
     for event in get_press_events(dtype=list):
         event['char'] = event['char'].upper()
 ```
+
+## State Dicts
+Stores return data in the form of so-called _state dicts_. State dicts are like
+regular dicts, except that any change to keys or values are immediately
+propagated back to the store from which they came.
+
+For example, suppose that `user` is a state dict. As such, `user['name'] =
+'John'` will not only update the dict but will sync this update back with the
+store, immediately reflecting this change in any other reference to the same
+object.  The same is true for other methods, like `update`, `setdefault`, etc.
+
+Let's illustrate with an example:
+
+```python
+frank_1 = store.create({'id': 1, 'name': 'frank'})
+frank_2 = store.get(1)
+
+# frank_1 and frank_2 are references to the same object,
+# so they should both reflect the same change.
+frank_1['name'] = 'Franklin'
+
+assert frank_2['name'] == 'Franklin'
+
+# likewise, any subsequent reference should reflect the same change
+frank_3 = store.get(1)
+
+assert frank_3['name'] == 'Franklin'
+```
+
+### Stateful Methods
+Here is a list of each `dict` method that has been extended to update the store
+upon updating the contents of the dict itself. On the left side of the arrow is
+the `dict` method call. On the right side is the corresponding `store` method
+call.
+
+- `state.update(mapping)` ➞ `store.update(state, mapping.keys())`
+- `state.setdefault(key, default)` ➞ `store.update(state, {key})`
+- `state[key] = value` ➞ `store.update(state, {key})`
+- `del state[key]` ➞ `store.delete(state, {key})`
+
+### Indexes
+By default, all `StateDict` entries are indexed in the store, including those
+with non-scalar values, like lists, sets, dicts, etc.
 
 ## Queries
 You can query a store like a SQL database, using _select_, _where_, _order_by_,
@@ -84,7 +127,6 @@ get_users = user_store.select(
     user_store.row.created_at > cutoff_date
 )
 ```
-
 ### Select
 By default, an empty select will select everything, like `select * from...` in
 SQL; however, if you're only interested in a subset of fields, you can
@@ -183,7 +225,34 @@ query = store.select(
 ```
 
 ## Transactions
-Todo
+Stores support transactions as well. If, for some reason you don't already know,
+a database transaction is a mechanism that allows you to perform multiple
+operations as if they were all performed int a single step. This way, if one
+operation fails, then they all fail, and the state of the store remains intact.
+The syntax for creating transactions is straight forward:
 
-## Implementation Details
-Todo
+```python
+with user_store.transaction() as user_trans:
+    # update the name of one user and delete another
+    users = user_trans.get_many([1, 2])
+    users[1]['name'] = 'Updated Name'
+    users[2].delete()
+```
+
+At the end of the `with` block, the transaction commits; otherwise, if an
+exception is raised, the transaction rolls back, clearing its internal state.
+
+Alternate to using the `with` statement, `commit` and `rollback` methods can be
+called explicitly.
+
+```python
+user_trans = user_store.transaction()
+
+try:
+    users = user_trans.get_many([1, 2])
+    users[1]['name'] = 'Updated Name'
+    users[2].delete()
+    user_trans.commit()
+except Exception:
+    user_trans.rollback()
+```

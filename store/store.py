@@ -339,13 +339,13 @@ class Store(StoreInterface):
                 else:
                     record = self.records[pkey]
 
+                    # remove keys in indices
+                    self.indexer.remove(record, keys=keys)
+
                     # remove keys from record
                     for key in keys:
                         if key in record:
                             del record[key]
-
-                    # remove keys in indices
-                    self.indexer.remove(record, keys=keys)
 
                     # tell transaction to update this pkey on commit
                     if transaction is not None:
@@ -390,11 +390,11 @@ class Store(StoreInterface):
                     if transaction is not None:
                         transaction.partially_deleted_pkeys[pkey].update(keys)
 
-                    # remove keys from record
                     if record:
+                        # remove keys from indices
+                        self.indexer.remove(record, keys=keys)
+
+                        # remove keys from record
                         for key in keys:
                             if key in record:
                                 del record[key]
-
-                        # remove keys from indices
-                        self.indexer.remove(record, keys=keys)

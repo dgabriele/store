@@ -79,6 +79,13 @@ class Transaction(TransactionInterface):
         """
         return Symbol()
 
+    @property
+    def records(self) -> Dict:
+        """
+        Alias for self.front.records.
+        """
+        return self.front.records
+
     def commit(self):
         """
         Atomically replay all journaled store actions (method calls) that were

@@ -37,6 +37,20 @@ class StateDict(StateDictInterface):
         super().__setitem__(key, value)
         self.backend.update(self, {key})
 
+    def __getitem__(self, key: Text) -> Any:
+        """
+        Get a value. If the key isn't stored in the dict, try to acquire it from
+        the store, if possible.
+        """
+        if key not in self:
+            # lazy fetch the value (if it exists in the store)
+            pkey = super().__getitem__(self.backend.pkey_name)
+            data = self.backend.records.get(pkey)
+            if key in data:
+                self.update({key: data[key]}, sync=False)
+
+        return super().__getitem__(key)
+
     def __delitem__(self, key: Any):
         """
         Delete the item from the stored record as well as from the dict itself.
@@ -85,7 +99,24 @@ class StateDict(StateDictInterface):
             self.transaction.delete(self, keys=keys)
         else:
             self.store.delete(self, keys=keys)
+
         return self
+
+    def pop(
+        self, key: Text, default: Optional[Any] = None, delete=False
+    ) -> Any:
+        """
+        Remove and return a value from the dict, also deleting it from the
+        backend store or transaction.
+        """
+        if delete:
+            if key in self:
+                value = super().pop(key)
+                self.backend.delete(self, {key})
+                return value
+            return default
+        else:
+            return super().pop(key, default)
 
     def projection(self, keys: Iterable[Text]) -> 'StateDict':
         """
@@ -96,4 +127,5 @@ class StateDict(StateDictInterface):
         })
         proj.store = self.store
         proj.transaction = self.transaction
+
         return proj
