@@ -3,6 +3,7 @@ class Ordering
 """
 
 from datetime import datetime, timedelta, date
+from store.util import get_hashable
 from typing import Iterable, List, Dict, Sequence
 
 from .interfaces import StateDictInterface, OrderingInterface
@@ -42,6 +43,9 @@ class Ordering(OrderingInterface):
             datetime: lambda x: x.timestamp(),
             timedelta: lambda x: x.total_seconds(),
             date: lambda x: x.toordinal(),
+            dict: get_hashable,
+            set: get_hashable,
+            tuple: get_hashable,
         }
 
         # pre-compute the "index" keys by which the records shall be sorted.

@@ -26,11 +26,13 @@ def get_hashable(value: Any, return_exc=False) -> Any:
     form that is. That's what we do here.
     """
     if isinstance(value, dict):
-        return tuple(sorted(value.items()))
+        return tuple(sorted(
+            (k, get_hashable(v)) for k, v in value.items()
+        ))
     elif isinstance(value, list):
-        return tuple(value)
+        return tuple(get_hashable(x) for x in value)
     elif isinstance(value, set):
-        return tuple(sorted(value))
+        return tuple(sorted(get_hashable(x) for x in value))
     else:
         exc = NotHashable(
             f'cannot store unhashable types, but got {type(value)}'
@@ -49,7 +51,7 @@ def to_dict(obj: Any) -> Dict:
     """
     if isinstance(obj, dict):
         return obj
-        
+
     data = {}
     predicate = lambda x: not callable(x)
 
