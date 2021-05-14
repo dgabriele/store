@@ -151,9 +151,11 @@ class Store(StoreInterface):
             if not targets:
                 # return all records by default
                 state_dicts = OrderedDict()
-                for pkey in self.records.keys() - self.identity.keys():
-                    record = self.records[pkey]
-                    state_dict = self.state_dict_factory(record)
+                for pkey in self.records:
+                    state_dict = self.identity.get(pkey)
+                    if state_dict is None:
+                        record = self.records[pkey]
+                        state_dict = self.state_dict_factory(record)
                     state_dicts[pkey] = state_dict
                 return state_dicts
             else:
@@ -338,18 +340,19 @@ class Store(StoreInterface):
                     self.indexer.remove(record)
                 else:
                     record = self.records[pkey]
-
-                    # remove keys in indices
-                    self.indexer.remove(record, keys=keys)
+                    old_record = record.copy()
 
                     # remove keys from record
                     for key in keys:
                         if key in record:
-                            del record[key]
+                            record[key] = None
+
+                    # remove keys in indices
+                    self.indexer.update(old_record, record, keys=keys)
 
                     # tell transaction to update this pkey on commit
                     if transaction is not None:
-                        transaction.partially_deleted_pkeys[pkey].update(keys)
+                        transaction.updated_pkeys[pkey].update(keys)
 
     def delete_many(
         self,
@@ -388,13 +391,14 @@ class Store(StoreInterface):
                     # tell the transaction that this record should be removed
                     # upon commit.
                     if transaction is not None:
-                        transaction.partially_deleted_pkeys[pkey].update(keys)
+                        transaction.updated_pkeys[pkey].update(keys)
 
                     if record:
-                        # remove keys from indices
-                        self.indexer.remove(record, keys=keys)
-
+                        old_record = record.copy()
                         # remove keys from record
                         for key in keys:
                             if key in record:
-                                del record[key]
+                                record[key] = None
+
+                        # remove keys from indices
+                        self.indexer.update(old_record, record, keys=keys)

@@ -50,20 +50,24 @@ with events.transaction() as transaction:
 ```
 
 ## State Dicts
-Stores return data in the form of so-called _state dicts_. State dicts are like
-regular dicts, except that any change to keys or values are immediately
-propagated back to the store from which they came.
-
-For example, suppose that `user` is a state dict. As such, `user['name'] =
-'John'` will not only update the dict but will sync this update back with the
-store, immediately reflecting this change in any other reference to the same
-object.  The same is true for other methods, like `update`, `setdefault`, etc.
+Store methods, like `create` and `update`, return _state dicts_. Unlike regular
+dicts, any change to the keys or values of a state dict results in an update to
+the store. For example, suppose that `user` is a state dict. As such,
+`user['name'] ='John'` generates a call to `store.update` under the hood. When
+this happens, any existing reference to the same `user` immediately reflect this
+change. There is no need to refresh each reference manually (as they are all
+actually the same object). The same is true for other methods, like `update`,
+`setdefault`, etc.
 
 Let's illustrate with an example:
 
 ```python
 frank_1 = store.create({'id': 1, 'name': 'frank'})
 frank_2 = store.get(1)
+
+# the store manages a singleton reference to frank's StateDict
+# in its internal so-called identity set.
+assert frank_1 is frank_2
 
 # frank_1 and frank_2 are references to the same object,
 # so they should both reflect the same change.
@@ -78,10 +82,9 @@ assert frank_3['name'] == 'Franklin'
 ```
 
 ### Stateful Methods
-Here is a list of each `dict` method that has been extended to update the store
-upon updating the contents of the dict itself. On the left side of the arrow is
-the `dict` method call. On the right side is the corresponding `store` method
-call.
+Here is a list of each `dict` method that has been extended to result in an
+update to store as a side-effect. On the lefthand side of each arrow is the
+`dict` method. On the righthand side is the corresponding `store` call.
 
 - `state.update(mapping)` ➞ `store.update(state, mapping.keys())`
 - `state.setdefault(key, default)` ➞ `store.update(state, {key})`
@@ -89,8 +92,8 @@ call.
 - `del state[key]` ➞ `store.delete(state, {key})`
 
 ### Indexes
-By default, all `StateDict` entries are indexed in the store, including those
-with non-scalar values, like lists, sets, dicts, etc.
+By default, all `StateDict` keys are indexed, including those with non-scalar
+values -- like lists, sets, dicts, etc. This means that that queries are fast.
 
 ## Queries
 You can query a store like a SQL database, using _select_, _where_, _order_by_,
@@ -142,10 +145,27 @@ query = store.select()
 query = store.select(store.row.name, store.row.email)
 ```
 
-### Where
+### Where (Filtering)
 You can constrain queries to select only records whose values match a given
 logical predicate. Predicates can be arbitrarily nested in compound boolean
 expressions. This is similar to the "where" clause in SQL select statements.
+
+### Filtering Non-scalars Values
+Unlike a SQL database, with a store, you can apply predicate logic not only to
+scalar values, like numbers and strings, but also non-scalar types, like dicts,
+lists, and sets.
+
+For example, this is possible:
+
+```python
+# imagine you have a store with user dicts, and each user dict
+# has a nested dog dict with an "age" value.
+
+get_users = store.select().where(store.row.dog <= {'age': 10})
+
+for user in get_users():
+    assert user['dog']['age'] <= 10
+```
 
 Using a symbol, here are some example:
 
@@ -204,6 +224,27 @@ query = store.select().order_by(
     user.created_at.desc
 )
 ```
+
+#### Ordering By Non-scalar Values
+Unlike SQL, the store can sort non-scalar datatypes, like dicts, lists, and sets
+-- in addition to plain ints and strings. This means that you can do things like
+-- this:
+
+```python
+store.create_many([
+    {'owner': 'Mohammed', 'dog': {'age': 10}},
+    {'owner': 'Kang Bo', 'dog': {'age': 6}},
+])
+
+get_users = store.select().order_by(store.row.dog.asc)
+users = get_users(dtype=list)
+
+for u1, u2 in zip(users, users[1:]):
+    assert u1.dog['age'] <= u2.dog['age']
+```
+
+Note that, when sorting a dict, the dict's items are sorted and compared in the
+resulting order.
 
 ### Limit & Offset
 Queries support pagination via limit and offset parameters. The `limit`

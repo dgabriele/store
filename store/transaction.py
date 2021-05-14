@@ -1,10 +1,15 @@
-from typing import (
-    Optional, Text, Any, List,
-    OrderedDict as OrderedDictType,
-    Dict, Set, Iterable, Union,
-    Callable, Tuple
-)
 from collections import defaultdict
+from typing import (
+    OrderedDict as OrderedDictType,
+    Text,
+    Any,
+    Dict,
+    Set,
+    Optional,
+    Iterable,
+    Union,
+    Callable,
+)
 
 from appyratus.memoize import memoized_property
 
@@ -12,7 +17,10 @@ from .util import get_pkeys, to_dict
 from .symbol import Symbol
 from .query import Query
 from .interfaces import (
-    QueryInterface, StoreInterface, TransactionInterface, StateDictInterface
+    QueryInterface,
+    StoreInterface,
+    TransactionInterface,
+    StateDictInterface
 )
 
 
@@ -34,7 +42,6 @@ class Transaction(TransactionInterface):
         self.front: StoreInterface = front
         self.callback = callback
         self.deleted_pkeys = set()
-        self.partially_deleted_pkeys = defaultdict(set)
         self.updated_pkeys = set()
         self.created_pkeys = set()
 
@@ -63,6 +70,20 @@ class Transaction(TransactionInterface):
             self.commit()
             return True
 
+    @property
+    def records(self) -> Dict:
+        """
+        Alias for self.front.records.
+        """
+        return self.front.records
+
+    @property
+    def pkey_name(self) -> Text:
+        """
+        Alias for self.front.pkey_name.
+        """
+        return self.front.pkey_name
+
     @memoized_property
     def row(self) -> Symbol:
         """
@@ -78,13 +99,6 @@ class Transaction(TransactionInterface):
 
         """
         return Symbol()
-
-    @property
-    def records(self) -> Dict:
-        """
-        Alias for self.front.records.
-        """
-        return self.front.records
 
     def commit(self):
         """
@@ -112,17 +126,12 @@ class Transaction(TransactionInterface):
                     self.front.records[pkey] for pkey in updated_pkeys
                 )
 
-            # flush partial deletes
-            partial_pkeys = (
-                self.partially_deleted_pkeys.keys() - self.deleted_pkeys
-            )
-            if partial_pkeys:
-                for pkey, deleted_keys in self.partially_deleted_pkeys.items():
-                    self.back.delete(pkey, keys=deleted_keys)
-
             # trigger custom callback method
             if self.callback is not None:
-                self.callback(self)
+                created = {k: self.front.records[k] for k in self.created_pkeys}
+                updated = {k: self.front.records[k] for k in self.updated_pkeys}
+                deleted = self.deleted_pkeys.copy()
+                self.callback(self, created, updated, deleted)
 
             # reinitialize transaction
             self.clear()
