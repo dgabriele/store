@@ -10,8 +10,6 @@ from typing import (
     Set, Text, Type, Union, Dict
 )
 
-from pandas import DataFrame
-
 from .interfaces import StateDictInterface, StoreInterface, QueryInterface
 from .exceptions import NotSelectable
 from .predicate import Predicate
@@ -44,6 +42,14 @@ class Query(QueryInterface):
     """
 
     def __init__(self, store: StoreInterface) -> None:
+        """
+        - `predicate`: the where predicate
+        - `orderings`: list of Ordering objects, like [user.name.asc, ...]
+        - `selected`: dict of selected keys, like {'name': SymbolicAttribute(name)}
+        - `limit_index`: the limit int
+        - `offset_index`: the offset int
+        - `callbacks`: callback functions executed after query.execute()
+        """
         super().__init__()
         self.store = store
         self.selected: Dict[Text, SymbolicAttribute] = {}
@@ -123,18 +129,8 @@ class Query(QueryInterface):
             for record in records:
                 pkey = record[self.store.pkey_name]
                 retval[pkey] = project(record, self.selected, pkey_name)
-        elif issubclass(dtype, (tuple, set)):
+        else:
             retval = dtype(
-                project(record, self.selected, pkey_name)
-                for record in records
-            )
-        elif issubclass(dtype, list):
-            retval = [
-                project(record, self.selected, pkey_name)
-                for record in records
-            ]
-        elif issubclass(dtype, DataFrame):
-            retval = DataFrame(
                 project(record, self.selected, pkey_name)
                 for record in records
             )

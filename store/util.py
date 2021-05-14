@@ -47,6 +47,9 @@ def to_dict(obj: Any) -> Dict:
     Convert an instance object into a dict, taking all hashable attributes,
     whether class or instance attributes.
     """
+    if isinstance(obj, dict):
+        return obj
+        
     data = {}
     predicate = lambda x: not callable(x)
 

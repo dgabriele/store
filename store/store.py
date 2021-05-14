@@ -3,7 +3,7 @@ class Store
 """
 
 from uuid import uuid4
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from threading import RLock
 from copy import deepcopy
 from typing import (
@@ -16,7 +16,7 @@ from weakref import WeakValueDictionary
 
 from appyratus.memoize import memoized_property
 
-from .interfaces import StateDictInterface, StoreInterface
+from .interfaces import StateDictInterface, StoreInterface, TransactionInterface
 from .transaction import Transaction
 from .symbol import Symbol, SymbolicAttribute
 from .query import Query
@@ -149,7 +149,7 @@ class Store(StoreInterface):
         """
         with self.lock:
             if not targets:
-                # return all records
+                # return all records by default
                 state_dicts = OrderedDict()
                 for pkey in self.records.keys() - self.identity.keys():
                     record = self.records[pkey]
@@ -157,13 +157,19 @@ class Store(StoreInterface):
                     state_dicts[pkey] = state_dict
                 return state_dicts
             else:
+                # return only the indicated records
                 fetched_states = OrderedDict()
+
                 for target in targets:
+                    # get pkey
                     if isinstance(target, dict):
                         pkey = target[self.pkey_name]
                     else:
                         pkey = getattr(target, self.pkey_name, target)
+
                     record = self.records.get(pkey)
+
+                    # create or update StateDict
                     if record is not None:
                         state_dict = self.identity.get(pkey)
                         if state_dict is not None:
@@ -176,17 +182,22 @@ class Store(StoreInterface):
 
                 return fetched_states
 
-    def create(self, target: Any) -> StateDictInterface:
+    def create(
+        self,
+        target: Any,
+        transaction: Optional[TransactionInterface] = None
+    ) -> StateDictInterface:
         """
         Insert a new record in the store.
         """
-        state_map = self.create_many([target])
+        state_map = self.create_many([target], transaction=transaction)
         records = list(state_map.values())
         return records[0]
 
     def create_many(
         self,
         targets: Iterable[Any],
+        transaction: Optional[TransactionInterface] = None
     ) -> OrderedDictType[Any, StateDict]:
         """
         Insert multiple records in the store, returning a mapping of created
@@ -220,6 +231,9 @@ class Store(StoreInterface):
 
                 # add record to return created dict
                 created[pkey] = state_dict
+                if transaction is not None:
+                    state_dict.transaction = transaction
+                    transaction.created_pkeys.add(pkey)
 
         return created
 
@@ -227,30 +241,36 @@ class Store(StoreInterface):
         self,
         target: Any,
         keys: Optional[Set] = None,
+        transaction: Optional[TransactionInterface] = None
     ) -> StateDictInterface:
         """
         Update an existing record in the store, returning the updated record.
         """
-        # try to convert instance object to dict
-        if not isinstance(target, dict):
-            record = to_dict(target)
-        else:
-            record = target
+        # cast target as dict
+        record = to_dict(target)
 
         pkey = record[self.pkey_name]
+
+        # keys to update:
         keys = set(keys or record.keys())
 
         existing_record = self.records[pkey]
+
+        # updating indices works by comparing old values to new;
+        # therefore, we need to make a copy of the pre-updated state
         old_state = existing_record.copy()
 
         with self.lock:
             if not keys:
+                # update the entire record
                 existing_record.update(record)
             else:
+                # update only certain keys
                 existing_record.update({
                     k: v for k, v in record.items() if k in record
                 })
 
+            # update keys in indices
             self.indexer.update(old_state, existing_record, keys)
 
             state_dict = self.identity.get(pkey)
@@ -260,11 +280,18 @@ class Store(StoreInterface):
                 state_dict = self.state_dict_factory(existing_record)
                 self.identity[pkey] = state_dict
 
+            # if this update call is part of a transaction,
+            # save a reference to it.
+            if transaction is not None:
+                state_dict.transaction = transaction
+                transaction.updated_pkeys.add(pkey)
+
             return state_dict
 
     def update_many(
         self,
         targets: Iterable[Any],
+        transaction: Optional[TransactionInterface] = None
     ) -> OrderedDictType[Any, StateDict]:
         """
         Update multiple records in the store, returning a mapping from updated
@@ -275,17 +302,13 @@ class Store(StoreInterface):
 
         with self.lock:
             for target in targets:
-                # try to convert instance object to dict
-                if not isinstance(target, dict):
-                    record = to_dict(target)
-                else:
-                    record = target
+                # cast target as dict
+                record = to_dict(target)
 
+                # update the record
                 pkey = record[self.pkey_name]
-                existing_state = self.records.get(pkey)
-
-                if existing_state is not None:
-                    updated[pkey] = self.update(record)
+                if pkey in self.records:
+                    updated[pkey] = self.update(record, transaction=transaction)
 
         return updated
 
@@ -293,6 +316,7 @@ class Store(StoreInterface):
         self,
         target: Any,
         keys: Optional[Iterable[Text]] = None,
+        transaction: Optional[TransactionInterface] = None
     ) -> None:
         """
         Delete an entire record from the store if no `keys` argument supplied;
@@ -303,22 +327,35 @@ class Store(StoreInterface):
         else:
             pkey = getattr(target, self.pkey_name, target)
         with self.lock:
+            # tell the transaction to delete this record on commit
+            if not keys and transaction is not None:
+                transaction.deleted_pkeys.add(pkey)
+
             if pkey in self.records:
                 if not keys:
+                    # remove the entire record
                     record = self.records.pop(pkey)
                     self.indexer.remove(record)
                 else:
                     record = self.records[pkey]
+
+                    # remove keys from record
                     for key in keys:
                         if key in record:
                             del record[key]
 
+                    # remove keys in indices
                     self.indexer.remove(record, keys=keys)
+
+                    # tell transaction to update this pkey on commit
+                    if transaction is not None:
+                        transaction.partially_deleted_pkeys[pkey].update(keys)
 
     def delete_many(
         self,
         targets: Iterable[Any],
         keys: Optional[Iterable[Text]] = None,
+        transaction: Optional[TransactionInterface] = None
     ) -> None:
         """
         Delete multiple entire records from the store if no `keys` argument
@@ -329,23 +366,35 @@ class Store(StoreInterface):
             if not keys:
                 # drop entire objects
                 for target in targets:
+                    # get pkey
                     if isinstance(target, dict):
                         pkey = target[self.pkey_name]
                     else:
                         pkey = getattr(target, self.pkey_name, target)
-                    self.delete(pkey)
+
+                    self.delete(pkey, transaction=transaction)
             else:
                 # drop only the keys/columns
                 keys = keys if isinstance(keys, set) else set(keys)
                 for target in targets:
+                    # get pkey
                     if isinstance(target, dict):
                         pkey = target[self.pkey_name]
                     else:
                         pkey = target
+
                     record = self.records.get(pkey)
+
+                    # tell the transaction that this record should be removed
+                    # upon commit.
+                    if transaction is not None:
+                        transaction.partially_deleted_pkeys[pkey].update(keys)
+
+                    # remove keys from record
                     if record:
                         for key in keys:
                             if key in record:
                                 del record[key]
 
+                        # remove keys from indices
                         self.indexer.remove(record, keys=keys)
