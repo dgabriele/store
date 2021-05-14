@@ -211,12 +211,14 @@ class StoreInterface:
     def create(
         self,
         target: Any,
+        transaction: Optional[TransactionInterface] = None
     ) -> StateDictInterface:
         raise NotImplementedError()
 
     def create_many(
         self,
         targets: Iterable[Any],
+        transaction: Optional[TransactionInterface] = None
     ) -> OrderedDict[Any, StateDictInterface]:
         raise NotImplementedError()
 
@@ -224,12 +226,14 @@ class StoreInterface:
         self,
         target: Any,
         keys: Optional[Set] = None,
+        transaction: Optional[TransactionInterface] = None
     ) -> StateDictInterface:
         raise NotImplementedError()
 
     def update_many(
         self,
         targets: Iterable[Any],
+        transaction: Optional[TransactionInterface] = None
     ) -> OrderedDict[Any, StateDictInterface]:
         raise NotImplementedError()
 
@@ -237,6 +241,7 @@ class StoreInterface:
         self,
         target: Any,
         keys: Optional[Iterable[Text]] = None,
+        transaction: Optional[TransactionInterface] = None
     ) -> None:
         raise NotImplementedError()
 
@@ -244,5 +249,6 @@ class StoreInterface:
         self,
         targets: Iterable[Any],
         keys: Optional[Iterable[Text]] = None,
+        transaction: Optional[TransactionInterface] = None
     ) -> None:
         raise NotImplementedError()
