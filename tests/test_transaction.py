@@ -5,8 +5,7 @@ def test_create_in_transaction(click_event, transaction):
 
     assert pkey in trans.front.records
     assert pkey not in trans.back.records
-    assert len(trans.journal) == 1
-    assert trans.journal[0][0] == 'create'
+    assert len(trans.created_pkeys) == 1
 
 
 def test_create_many_in_transaction(click_event, press_event, transaction):
@@ -18,28 +17,25 @@ def test_create_many_in_transaction(click_event, press_event, transaction):
         assert pkey in trans.front.records
         assert pkey not in trans.back.records
 
-    assert len(trans.journal) == 1
-    assert trans.journal[0][0] == 'create_many'
+    assert len(trans.created_pkeys) == 2
 
 
 def test_get_in_transaction(click_event, transaction):
     trans = transaction
     trans.create(click_event)
-    assert len(trans.journal) == 1
+    assert len(trans.created_pkeys) == 1
 
     record = trans.get(click_event['id'])
     assert record is not None
-    assert len(trans.journal) == 1
 
 
 def test_get_many_in_transaction(click_event, press_event, transaction):
     trans = transaction
     trans.create_many([click_event, press_event])
-    assert len(trans.journal) == 1
+    assert len(trans.created_pkeys) == 2
 
     records = trans.get_many([click_event['id'], press_event['id']])
     assert len(records) == 2
-    assert len(trans.journal) == 1
 
 
 def test_select_in_transaction(store):
@@ -68,7 +64,7 @@ def test_update_in_transaction(store_with_data, click_event, transaction):
 
     trans.update(click_event)
 
-    assert len(trans.journal) == 1
+    assert len(trans.updated_pkeys) == 1
 
     record = trans.front.get(click_event['id'])
     assert record is not None
@@ -93,7 +89,7 @@ def test_update_many_in_transaction(store_with_data, click_event, press_event, t
 
     trans.update_many([click_event, press_event])
 
-    assert len(trans.journal) == 1
+    assert len(trans.updated_pkeys) == 2
 
     record = trans.front.get(click_event['id'])
     assert record is not None
@@ -117,7 +113,7 @@ def test_delete_in_transaction(store_with_data, click_event, transaction):
     trans.delete(click_event)
     pkey = click_event['id']
     
-    assert len(trans.journal) == 1
+    assert len(trans.deleted_pkeys) == 1
     assert pkey not in trans.front
     assert pkey in trans.back
 
@@ -127,7 +123,7 @@ def test_delete_many_in_transaction(store_with_data, click_event, press_event, t
     trans.store = store_with_data
     trans.delete_many([click_event, press_event])
 
-    assert len(trans.journal) == 1
+    assert len(trans.deleted_pkeys) == 2
 
     for event in [click_event, press_event]:
         pkey = event['id']
